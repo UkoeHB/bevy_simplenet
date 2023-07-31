@@ -111,7 +111,7 @@ fn connections_limit_test(max_connections: u32)
 
     // 3. disconnect one client
     let client_to_disconnect = clients.pop().expect("there should be at least one connected client");
-    client_to_disconnect.close(&client_runtime).extract().unwrap().unwrap();
+    client_to_disconnect.close();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

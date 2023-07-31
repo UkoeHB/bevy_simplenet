@@ -65,14 +65,21 @@ where
     }
 
     /// respond to the client being closed
-    /// return an error to force the client to close completely
     //todo: customize behavior on closure reason
-    //todo: we don't want to force-close but if the server closes us (to complete close handshake), ezsockets will try
-    //      to auto-reconnect the client; can return ClientCloseMode::{Close, Reconnect} to ezsockets
-    async fn on_close(&mut self) -> Result<(), ezsockets::Error>
+    async fn on_close(&mut self, _close_frame: Option<ezsockets::CloseFrame>)
+    -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
         tracing::info!("ClientHandler: closed by ??");
-        Err(Box::new(ClientError::ClosedByServer))  //assume closed by server (todo: maybe closed by client)
+        Ok(ezsockets::client::ClientCloseMode::Close)
+        //Err(Box::new(ClientError::ClosedByServer))  //assume closed by server (todo: maybe closed by client)
+    }
+
+    /// respond to the client being disconnected
+    //todo: customize behavior on config
+    async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
+    {
+        tracing::info!("ClientHandler: disconnected");
+        Ok(ezsockets::client::ClientCloseMode::Close)
     }
 }
 

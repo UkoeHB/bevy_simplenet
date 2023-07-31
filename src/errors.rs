@@ -57,7 +57,7 @@ impl std::error::Error for ConnectionError {}
 #[derive(Debug)]
 pub(crate) enum ClientError
 {
-    ClosedByServer,
+    //ClosedByServer,
     SendError
 }
 
@@ -68,7 +68,7 @@ impl std::fmt::Display for ClientError
         let _ = write!(f, "ClientError::");
         match self
         {
-            ClientError::ClosedByServer => write!(f, "ClosedByServer"),
+            //ClientError::ClosedByServer => write!(f, "ClosedByServer"),
             ClientError::SendError      => write!(f, "SendError"),
         }
     }

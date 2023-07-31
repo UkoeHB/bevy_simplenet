@@ -74,7 +74,7 @@ impl<I: Debug + Clone, T: Debug + Clone> SessionSourceMsg<I, T>
 pub(crate) enum SessionCommand<ServerMsg: Debug + Clone>
 {
     SendMsg(ServerMsg),
-    Close
+    Close(ezsockets::CloseFrame)
 }
 
 //-------------------------------------------------------------------------------------------------------------------

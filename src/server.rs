@@ -65,7 +65,7 @@ where
 
     /// Close the target session.
     /// note: the target session may not be closed until some time after this method is called
-    pub fn close_session(&self, id: SessionID) -> Result<(), ()>
+    pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         tracing::info!(id, "Server: closing client");
@@ -74,7 +74,7 @@ where
             tracing::error!(id, "Server: tried to close session but server is dead");
             return Err(());
         }
-        if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::Close))
+        if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::Close(close_frame)))
         {
             tracing::error!(?err, "Server: failed to forward session close command to session");
             return Err(());

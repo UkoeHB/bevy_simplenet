@@ -72,23 +72,21 @@ where
     }
 
     /// Close the client.
-    pub fn close(self, runtime: &tokio::runtime::Runtime) -> PendingResult<()>
+    pub fn close(&self)
     {
         if self.is_dead()
         {
             tracing::warn!("Client: tried to close an already dead client");
-            return PendingResult::immediate((), runtime);
+            return;
         }
         //todo: panics if client is dead (race condition with testing if dead) (pending wrapper prevents panic from leaking)
-        //todo: pass in closure reason (closed by client)
-        //todo: ezsockets::Client::close() should not be async (upstream bug); don't need to consume client once that's fixed
         tracing::info!("Client: closing self");
         let closure_frame =
             ezsockets::CloseFrame{
                 code   : ezsockets::CloseCode::Normal,
                 reason : String::from("done")
             };
-        PendingResult::<()>::new(runtime.spawn(async move { self.client.close(Some(closure_frame)).await }))
+        self.client.close(Some(closure_frame));
     }
 }
 

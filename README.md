@@ -89,9 +89,9 @@ std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async mach
 
 
 // read connection message
-let Some(bevy_simplenet::ConnectionReport::Connected(client_id, connect_msg)) =
-    server.try_get_next_connection_report()
-else { panic!("did not receive connection report"); };
+let bevy_simplenet::ConnectionReport::Connected(client_id, connect_msg) =
+    server.try_get_next_connection_report().unwrap()
+else { panic!("received disconnected report"); };
 assert_eq!(connect_msg.0, String::from("hello"));
 
 

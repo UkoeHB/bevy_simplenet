@@ -71,7 +71,8 @@ fn bevy_simplenet_hello_world()
                 max_msg_size      : 1_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
                         period    : std::time::Duration::from_secs(1),
-                        max_count : 20 }
+                        max_count : 20
+                    }
             }
         );
 
@@ -123,7 +124,12 @@ fn bevy_simplenet_hello_world()
 
     // server closes client
     tracing::info!("ws hello world test: server closing client...");
-    websocket_server.close_session(client_id).unwrap();
+    let closure_frame =
+        ezsockets::CloseFrame{
+            code   : ezsockets::CloseCode::Normal,
+            reason : String::from("test")
+        };
+    websocket_server.close_session(client_id, closure_frame).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -157,12 +163,12 @@ fn bevy_simplenet_hello_world()
 
     // client closes client
     tracing::info!("ws hello world test: client closing client...");
-    websocket_client.close(&client_runtime).extract().unwrap().unwrap();  //wait for it to close
+    websocket_client.close();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
     assert!(!websocket_server.is_dead());
-    //assert!(websocket_client.is_dead());  //todo: can't call because bevy_simplenetlient::close() consumes the client
+    assert!(websocket_client.is_dead());
 
     let Some(bevy_simplenet::ConnectionReport::Disconnected(dc_client_id)) = websocket_server.try_get_next_connection_report()
     else { panic!("server should be disconnected after client is disconnected (by client)"); };

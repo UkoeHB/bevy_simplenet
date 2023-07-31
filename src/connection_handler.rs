@@ -303,12 +303,12 @@ where
                 };
                 session.binary(ser_msg);
             }
-            SessionCommand::Close =>
+            SessionCommand::<ServerMsg>::Close(close_frame) =>
             {
-                // force the target session to close
-                //todo: .call() potentially panics
+                // command the target session to close
                 tracing::info!(session_msg.id, "ConnectionHandler: closing session");
-                session.call(());  //the on_call() handler forces closure
+                if let Err(_) = session.close(Some(close_frame)).await
+                { tracing::error!(session_msg.id, "ConnectionHandler: failed closing session"); }
             }
         }
 
