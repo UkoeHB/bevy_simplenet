@@ -123,8 +123,7 @@ assert_eq!(msg_server_val, 24);
 - [ezsockets](https://docs.rs/ezsockets/latest/ezsockets/) backend needs to be upgraded to:
     - remove panics from public interfaces
     - emit closure reasons from clients
-    - allow clients to choose close vs reconnect when disconnected (e.g. close if server commands it, reconnect if there is a network issue) (follow-up todo: add reconnect policy to client config)
-    - remove `async` requirement from `Client::close()`
+- Add reconnect policy to client config.
 - Implement `AuthToken`:
     - client id = hash(client key)
     - auth key signs { client id, token expiry }
