@@ -7,28 +7,28 @@
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Handle for the result of async work (performed in a tokio runtime).
+/// Handle for the result of async work (performed in a std::thread).
 /// - The result will hang if the associated runtime is shut down.
 #[derive(Debug)]
-pub struct PendingResult<R>
+pub struct StdPendingResult<R>
 {
-    join_handle: Option<tokio::task::JoinHandle<R>>
+    join_handle: Option<std::thread::JoinHandle<R>>
 }
 
-impl<R> PendingResult<R>
+impl<R> StdPendingResult<R>
 {
     /// Make a new pending result.
-    pub fn new(join_handle: tokio::task::JoinHandle<R>) -> PendingResult<R>
+    pub fn new(join_handle: std::thread::JoinHandle<R>) -> StdPendingResult<R>
     {
-        PendingResult{ join_handle: Some(join_handle) }
+        StdPendingResult{ join_handle: Some(join_handle) }
     }
 
     /// Make a pending result that is immediately ready.
-    pub fn immediate(result: R, runtime: &tokio::runtime::Runtime) -> PendingResult<R>
+    pub fn immediate(result: R) -> StdPendingResult<R>
     where
         R: Send + 'static
     {
-        PendingResult::<R>::new(runtime.spawn(futures::future::ready::<R>(result)))
+        StdPendingResult::<R>::new(std::thread::spawn(|| result))
     }
 
     /// Check if result is available.
@@ -44,7 +44,7 @@ impl<R> PendingResult<R>
     }
 
     /// Check if work is done (result may be unavailable if already extracted).
-    /// - This is robust for checking if a result-less task has completed (i.e. `PendingResult<()>`).
+    /// - This is robust for checking if a result-less task has completed (i.e. `StdPendingResult<()>`).
     pub fn is_done(&self) -> bool
     {
         if self.has_result() || self.join_handle.is_none() { return true; }
@@ -52,36 +52,25 @@ impl<R> PendingResult<R>
     }
 
     /// Extract result if available (non-blocking).
-    pub fn try_extract(&mut self) -> Option<Result<R, tokio::task::JoinError>>
+    pub fn try_extract(&mut self) -> Option<Result<R, ()>>
     {
         // check if result available
         if !self.has_result() { return None; }
 
         // extract thread result
         let join_handle = self.join_handle.take().unwrap();
-        Some(futures::executor::block_on(async move { join_handle.await } ))
+        Some(join_handle.join().map_err(|_| ()))
     }
 
     /// Extract result if not yet extracted (blocking).
-    pub fn extract(&mut self) -> Option<Result<R, tokio::task::JoinError>>
+    pub fn extract(&mut self) -> Option<Result<R, ()>>
     {
         // check if already extracted
         if self.join_handle.is_none() { return None; }
 
         // extract thread result (blocks to wait)
         let join_handle = self.join_handle.take().unwrap();
-        Some(futures::executor::block_on(async move { join_handle.await } ))
-    }
-
-    /// Extract result if not yet extracted (async).
-    pub async fn extract_async(&mut self) -> Option<Result<R, tokio::task::JoinError>>
-    {
-        // check if already extracted
-        if self.join_handle.is_none() { return None; }
-
-        // extract thread result
-        let join_handle = self.join_handle.take().unwrap();
-        Some(join_handle.await)
+        Some(join_handle.join().map_err(|_| ()))
     }
 }
 

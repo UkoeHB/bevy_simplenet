@@ -118,6 +118,12 @@ assert_eq!(msg_server_val, 24);
 
 
 
+## Bonus
+
+- Exposes `TokioPendingResult<R>()` and `StdPendingResult<R>()` for handling the output of a thread.
+
+
+
 ## TODOs
 
 - [ezsockets](https://docs.rs/ezsockets/latest/ezsockets/) backend needs to be upgraded to:

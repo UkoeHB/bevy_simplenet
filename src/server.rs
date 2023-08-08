@@ -28,9 +28,9 @@ where
     client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
 
     /// signal indicates if server internal worker has stopped
-    server_closed_signal: PendingResult<()>,
+    server_closed_signal: TokioPendingResult<()>,
     /// signal indicates if server runner has stopped
-    server_running_signal: PendingResult<()>,
+    server_running_signal: TokioPendingResult<()>,
 
     /// cached runtime to ensure server remains operational (optional)
     _runtime: Option<Arc<tokio::runtime::Runtime>>,
@@ -146,7 +146,7 @@ where
         tracing::info!("new Server (pending)");
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
-        PendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        TokioPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
                 runtime.spawn( async move {
                         factory_clone.new_server_async(
                                 Some(runtime_clone),
@@ -194,7 +194,7 @@ where
                         _phantom: std::marker::PhantomData::default()
                     }
             );
-        let server_closed_signal = PendingResult::<()>::new(
+        let server_closed_signal = TokioPendingResult::<()>::new(
                 tokio::spawn(
                         async move {
                             if let Err(err) = server_worker.await
@@ -210,7 +210,7 @@ where
 
         // launch the server core
         let server_clone = server.clone();
-        let server_running_signal = PendingResult::<()>::new(
+        let server_running_signal = TokioPendingResult::<()>::new(
                 tokio::spawn(
                         async move {
                             if let Err(err) = ezsockets::tungstenite::run_on(

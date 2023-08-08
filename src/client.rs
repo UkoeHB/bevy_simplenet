@@ -24,7 +24,7 @@ where
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
-    client_closed_signal: PendingResult<()>,
+    client_closed_signal: TokioPendingResult<()>,
 
     /// cached runtime to ensure client remains operational (optional)
     _runtime: Option<Arc<tokio::runtime::Runtime>>,
@@ -123,12 +123,12 @@ where
         url         : url::Url,
         auth        : AuthRequest,
         connect_msg : ConnectMsg
-    ) -> PendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
+    ) -> TokioPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new Client (pending)");
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
-        PendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        TokioPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
                 runtime.spawn( async move {
                         factory_clone.new_client_async(
                                 Some(runtime_clone),
@@ -169,7 +169,7 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = PendingResult::<()>::new(tokio::spawn(
+        let client_closed_signal = TokioPendingResult::<()>::new(tokio::spawn(
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

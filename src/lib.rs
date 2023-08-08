@@ -12,10 +12,11 @@ mod client_handler;
 mod common;
 mod connection_handler;
 mod errors;
-mod pending_result;
 mod rate_limiter;
 mod server;
 mod session_handler;
+mod std_pending_result;
+mod tokio_pending_result;
 
 //API exports
 pub use crate::authentication::*;
@@ -24,7 +25,8 @@ pub(crate) use crate::client_handler::*;
 pub use crate::common::*;
 pub(crate) use crate::connection_handler::*;
 pub(crate) use crate::errors::*;
-pub use crate::pending_result::*;
 pub use crate::rate_limiter::*;
 pub use crate::server::*;
 pub(crate) use crate::session_handler::*;
+pub use crate::std_pending_result::*;
+pub use crate::tokio_pending_result::*;
