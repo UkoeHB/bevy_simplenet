@@ -47,14 +47,17 @@ where
     {
         if self.is_dead()
         {
-            tracing::warn!("Client: tried to send message to dead client");
+            tracing::warn!("tried to send message to dead client");
             return Err(());
         }
 
         // forward message to server
-        //todo: .binary() potentially panics  (race condition with testing if dead)
         let Ok(ser_msg) = bincode::serialize(msg) else { return Err(()); };
-        self.client.binary(ser_msg);
+        if let Err(_) = self.client.binary(ser_msg)
+        {
+            tracing::warn!("tried to send message to dead client");
+            return Err(());
+        }
         Ok(())
     }
 
@@ -76,17 +79,19 @@ where
     {
         if self.is_dead()
         {
-            tracing::warn!("Client: tried to close an already dead client");
+            tracing::warn!("tried to close an already dead client");
             return;
         }
-        //todo: panics if client is dead (race condition with testing if dead) (pending wrapper prevents panic from leaking)
-        tracing::info!("Client: closing self");
+        tracing::info!("client closing self");
         let closure_frame =
             ezsockets::CloseFrame{
                 code   : ezsockets::CloseCode::Normal,
-                reason : String::from("done")
+                reason : String::from("client done")
             };
-        self.client.close(Some(closure_frame));
+        if self.client.close(Some(closure_frame)).is_err()
+        {
+            tracing::warn!("tried to close an already dead client");
+        }
     }
 }
 
@@ -173,7 +178,7 @@ where
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {
-                        tracing::error!(err, "Client: closed with error");
+                        tracing::error!(err, "client closed with error");
                     }
                 }
             ));

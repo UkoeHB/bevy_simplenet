@@ -20,7 +20,7 @@ fn check_protocol_version(
     let Some(version_msg_val) = request.headers().get(VERSION_MSG_HEADER)
     else
     {
-        tracing::trace!("ConnectionHandler: invalid version message (not present)");
+        tracing::trace!("invalid version message (not present)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Version message missing.")
@@ -30,7 +30,7 @@ fn check_protocol_version(
     // sanity check the version msg size so we can safely log the version if there is a mismatch
     if version_msg_val.as_bytes().len() > 20
     {
-        tracing::trace!("ConnectionHandler: version too big");
+        tracing::trace!("version too big");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Size,
                     reason : String::from("Version oversided.")
@@ -40,7 +40,7 @@ fn check_protocol_version(
     // check protocol version
     if version_msg_val.as_bytes() != protocol_version.as_bytes()
     {
-        tracing::trace!(?version_msg_val, protocol_version, "ConnectionHandler: version mismatch");
+        tracing::trace!(?version_msg_val, protocol_version, "version mismatch");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Version mismatch.")
@@ -62,7 +62,7 @@ fn try_extract_client_id(
     let Some(auth_msg_val) = request.headers().get(AUTH_MSG_HEADER)
     else
     {
-        tracing::trace!("ConnectionHandler: invalid auth message (not present)");
+        tracing::trace!("invalid auth message (not present)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Auth message missing.")
@@ -73,7 +73,7 @@ fn try_extract_client_id(
     let Ok(auth_request) = serde_json::de::from_slice::<AuthRequest>(auth_msg_val.as_bytes())
     else
     {
-        tracing::trace!("ConnectionHandler: invalid auth message (deserialization)");
+        tracing::trace!("invalid auth message (deserialization)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Invalid,
                     reason : String::from("Auth message malformed.")
@@ -83,7 +83,7 @@ fn try_extract_client_id(
     // validate
     if !authenticate(&auth_request, authenticator)
     {
-        tracing::trace!("ConnectionHandler: invalid auth message (verification)");
+        tracing::trace!("invalid auth message (verification)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Auth message invalid.")
@@ -107,7 +107,7 @@ where
     let Some(connect_msg_val) = request.headers().get(CONNECT_MSG_HEADER)
     else
     {
-        tracing::trace!("ConnectionHandler: invalid connect message (not present)");
+        tracing::trace!("invalid connect message (not present)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Connect message missing.")
@@ -120,7 +120,7 @@ where
     //       at the network layer
     if connect_msg_val.as_bytes().len() > max_msg_size as usize
     {
-        tracing::trace!("ConnectionHandler: invalid connect message (too large)");
+        tracing::trace!("invalid connect message (too large)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Size,
                     reason : String::from("Connect message too large.")
@@ -131,7 +131,7 @@ where
     let Ok(connect_msg) = serde_json::de::from_slice::<ConnectMsg>(connect_msg_val.as_bytes())
     else
     {
-        tracing::trace!("ConnectionHandler: invalid connect message (deserialization)");
+        tracing::trace!("invalid connect message (deserialization)");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Invalid,
                     reason : String::from("Connect message malformed.")
@@ -196,7 +196,7 @@ where
         // reject connection if max connections reached
         if self.session_registry.len() >= self.config.max_connections as usize
         {
-            tracing::warn!("ConnectionHandler: max connections reached, dropping connection request...");
+            tracing::trace!("max connections reached, dropping connection request...");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Protocol,
                     reason : String::from("Max connections reached.")
@@ -209,7 +209,7 @@ where
         // reject connection if client id is already registered as a session
         if self.session_registry.contains_key(&id)
         {
-            tracing::warn!(id, "ConnectionHandler: received connection request from already-connected client");
+            tracing::trace!(id, "received connection request from already-connected client");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Protocol,
                     reason : String::from("Client is already connected.")
@@ -220,17 +220,16 @@ where
         let connect_msg = try_extract_connect_msg(&request, self.config.max_msg_size)?;
 
         // make a session
-        let socket_msg_sender = socket.sink.clone();
         let client_msg_sender = self.client_msg_sender.clone();
         let max_msg_size      = self.config.max_msg_size;
         let rate_limit_config = self.config.rate_limit_config.clone();
 
         let session = ezsockets::Session::create(
-                move |_session_handle|
+                move | session |
                 {
                     SessionHandler::<ClientMsg>{
                             id,
-                            socket_msg_sender,
+                            session,
                             client_msg_sender,
                             max_msg_size,
                             rate_limit_tracker: RateLimitTracker::new(rate_limit_config)
@@ -246,7 +245,7 @@ where
         // report the new connection
         if let Err(err) = self.connection_report_sender.send(ConnectionReport::<ConnectMsg>::Connected(id, connect_msg))
         {
-            tracing::error!(?err, "ConnectionHandler: forwarding connection report failed");
+            tracing::error!(?err, "forwarding connection report failed");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Error,
                     reason : String::from("Server internal error.")
@@ -257,16 +256,20 @@ where
     }
 
     /// Responds to session disconnects.
-    async fn on_disconnect(&mut self, id: SessionID) -> Result<(), ezsockets::Error>
+    async fn on_disconnect(
+        &mut self,
+        id      : SessionID,
+        _reason : Result<Option<ezsockets::CloseFrame>, ezsockets::Error>
+    ) -> Result<(), ezsockets::Error>
     {
         // unregister session
-        tracing::info!(id, "ConnectionHandler: unregistering session");
+        tracing::info!(id, "unregistering session");
         self.session_registry.remove(&id);
 
         // send connection report
         if let Err(err) = self.connection_report_sender.send(ConnectionReport::<ConnectMsg>::Disconnected(id))
         {
-            tracing::error!(?err, "ConnectionHandler: forwarding disconnect report failed");
+            tracing::error!(?err, "forwarding disconnect report failed");
             return Err(Box::new(ConnectionError::SystemError));
         }
 
@@ -283,7 +286,7 @@ where
         let Some(session) = self.session_registry.get(&session_msg.id)
         else
         {
-            tracing::warn!(session_msg.id, "ConnectionHandler: dropping message sent to unknown session");
+            tracing::warn!(session_msg.id, "dropping message sent to unknown session");
             return Ok(());
         };
 
@@ -292,23 +295,21 @@ where
         {
             SessionCommand::<ServerMsg>::SendMsg(msg_to_send) =>
             {
-                // forward server message to target session
-                //todo: .binary() potentially panics
-                tracing::trace!(session_msg.id, "ConnectionHandler: sending message to session");
+                // serialize message
+                tracing::trace!(session_msg.id, "sending message to session");
                 let Ok(ser_msg) = bincode::serialize(&msg_to_send)
-                else
-                {
-                    tracing::trace!(session_msg.id, "ConnectionHandler: serializing message failed");
-                    return Err(Box::new(ConnectionError::SerializationError));
-                };
-                session.binary(ser_msg);
+                else { tracing::error!(session_msg.id, "serializing message failed"); return Ok(()); };
+
+                // forward server message to target session
+                if let Err(_) = session.binary(ser_msg)
+                { tracing::error!(session_msg.id, "dropping message sent to broken session"); }
             }
             SessionCommand::<ServerMsg>::Close(close_frame) =>
             {
                 // command the target session to close
-                tracing::info!(session_msg.id, "ConnectionHandler: closing session");
+                tracing::info!(session_msg.id, "closing session");
                 if let Err(_) = session.close(Some(close_frame)).await
-                { tracing::error!(session_msg.id, "ConnectionHandler: failed closing session"); }
+                { tracing::error!(session_msg.id, "failed closing session"); }
             }
         }
 

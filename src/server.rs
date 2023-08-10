@@ -45,18 +45,18 @@ where
     /// Associated factory type.
     pub type Factory = ServerFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
-    /// send a message to the target session
+    /// Send a message to the target session.
     pub fn send_msg(&self, id: SessionID, msg: ServerMsg) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if self.is_dead()
         {
-            tracing::error!(id, "Server: tried to send message to session but server is dead");
+            tracing::warn!(id, "tried to send message to session but server is dead");
             return Err(());
         }
         if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::SendMsg(msg)))
         {
-            tracing::error!(?err, "Server: failed to forward session message to session");
+            tracing::error!(?err, "failed to forward session message to session");
             return Err(());
         }
 
@@ -68,22 +68,22 @@ where
     pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
-        tracing::info!(id, "Server: closing client");
+        tracing::info!(id, "closing client");
         if self.is_dead()
         {
-            tracing::error!(id, "Server: tried to close session but server is dead");
+            tracing::warn!(id, "tried to close session but server is dead");
             return Err(());
         }
         if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::Close(close_frame)))
         {
-            tracing::error!(?err, "Server: failed to forward session close command to session");
+            tracing::error!(?err, "failed to forward session close command to session");
             return Err(());
         }
 
         Ok(())
     }
 
-    /// Try to get next available connection report.
+    /// Try to get the next available connection report.
     pub fn try_get_next_connection_report(&self) -> Option<ConnectionReport<ConnectMsg>>
     {
         //todo: count connections
@@ -91,14 +91,14 @@ where
         Some(msg)
     }
 
-    /// Try to extract next available message from a client.
+    /// Try to extract the next available message from a client.
     pub fn try_get_next_msg(&self) -> Option<(SessionID, ClientMsg)>
     {
         let Ok(msg) = self.client_msg_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
     }
 
-    /// Test if server is dead.
+    /// Test if the server is dead.
     pub fn is_dead(&self) -> bool
     {
         self.server_closed_signal.is_done() || self.server_running_signal.is_done()
@@ -143,7 +143,7 @@ where
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
     {
-        tracing::info!("new Server (pending)");
+        tracing::info!("new server pending");
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
         TokioPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
@@ -199,7 +199,7 @@ where
                         async move {
                             if let Err(err) = server_worker.await
                             {
-                                tracing::error!(?err, "Server: server closed with error");
+                                tracing::error!(?err, "server closed with error");
                             }
                         }
                     )
@@ -219,14 +219,14 @@ where
                                     connection_acceptor
                                 ).await
                             {
-                                tracing::error!(?err, "Server: server stopped running with error");
+                                tracing::error!(?err, "server stopped running with error");
                             }
                         }
                     )
             );
 
         // finish assembling our server
-        tracing::info!("new Server (done)");
+        tracing::info!("new server created");
         Server{
                 server_msg_sender: server.into(),  //extract the call sender
                 connection_report_receiver,

@@ -17,8 +17,8 @@ where
 {
     /// id of this session
     pub(crate) id: SessionID,
-    /// channel into this session's socket
-    pub(crate) socket_msg_sender: ezsockets::Sink,
+    /// this session
+    pub(crate) session: ezsockets::Session<SessionID, ()>,
     /// sender for forwarding messages from the session's client to the server
     pub(crate) client_msg_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientMsg>>,
 
@@ -46,8 +46,8 @@ where
     async fn on_text(&mut self, _text: String) -> Result<(), ezsockets::Error>
     {
         // reject text from client
-        tracing::warn!("SessionHandler: received text from client (not implemented), closing session...");
-        Err(self.close().await)
+        tracing::trace!("received text from client (not implemented), closing session...");
+        self.close("text not allowed").await; return Ok(());
     }
 
     // Receive binary from client (via session connection).
@@ -56,40 +56,38 @@ where
         // try to update rate limit tracker
         if !self.rate_limit_tracker.try_count_msg()
         {
-            tracing::warn!("SessionHandler: client messages exceeded rate limit, closing session...");
-            return Err(self.close().await);
+            tracing::trace!("client messages exceeded rate limit, closing session...");
+            self.close("rate limit violation").await; return Ok(());
         }
 
         // try to deserialize message
         if bytes.len() > self.max_msg_size as usize
         {
-            tracing::warn!("SessionHandler: received client message that's too large, closing session...");
-            return Err(self.close().await);
+            tracing::trace!("received client message that's too large, closing session...");
+            self.close("message size violation").await; return Ok(());
         }
         let Ok(message) = bincode::deserialize::<ClientMsg>(&bytes[..])
         else
         {
-            tracing::warn!("SessionHandler: received client message that failed to deserialize, closing session...");
-            return Err(self.close().await);
+            tracing::trace!("received client message that failed to deserialize, closing session...");
+            self.close("deserialization failure").await; return Ok(());
         };
 
         // try to forward client message to session owner
         if let Err(err) = self.client_msg_sender.send(SessionSourceMsg::new(self.id, message))
         {
-            tracing::error!(?err, "SessionHandler: client msg sender is broken, closing session...");
-            return Err(self.close().await);
+            tracing::error!(?err, "client msg sender is broken, closing session...");
+            self.close("session error").await; return Ok(());
         }
 
         Ok(())
     }
 
     // Responds to calls to the session connected to this handler (i.e. ezsockets::Session::call()).
-    // Returns an error, which forces the session to close.
-    //todo: return an informative error message to the client (error is not currently forwarded to client)
     async fn on_call(&mut self, _msg: ()) -> Result<(), ezsockets::Error>
     {
-        tracing::info!(self.id, "SessionHandler: closed by server");
-        Err(self.close().await)
+        tracing::info!(self.id, "received call (not implemented), closing session...");
+        self.close("session error").await; return Ok(());
     }
 }
 
@@ -98,24 +96,19 @@ where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     /// Close the session
-    //todo: return an informative error message to the client (error is not currently forwarded to client)
-    async fn close(&mut self) -> ezsockets::Error
+    async fn close(&mut self, reason: &str)
     {
-        tracing::info!(self.id, "SessionHandler: closing...");
-
-        // close socket (if we don't do this the socket will hang open)
-        //todo: higher-granularity close reasons (match on close code)
-        //todo: this should not need to be async
-        self.socket_msg_sender.send(ezsockets::Message::Close(Some(
+        tracing::info!(self.id, "closing...");
+        if let Err(_) = self.session.close(Some(
                 ezsockets::CloseFrame
                 {
                     code   : ezsockets::CloseCode::Error,
-                    reason : String::from("closed by server")
+                    reason : String::from(reason)
                 }
-            ))).await;
-
-        // return error to force-close the session
-        Box::new(SessionError::ClosedByServer)
+            )).await
+        {
+            tracing::error!(self.id, "failed closing session");
+        }
     }
 }
 

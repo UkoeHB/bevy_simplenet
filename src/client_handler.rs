@@ -28,27 +28,27 @@ where
     async fn on_text(&mut self, _text: String) -> Result<(), ezsockets::Error>
     {
         // ignore text received
-        tracing::warn!("ClientHandler: received text from server (not handled)");
+        tracing::warn!("received text from server (not handled)");
         Ok(())
     }
 
     /// binary from server
     async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), ezsockets::Error>
     {
-        tracing::trace!("ClientHandler: received binary from server");
+        tracing::trace!("received binary from server");
 
         // deserialize message
         let Ok(server_msg) = bincode::deserialize::<ServerMsg>(&bytes[..])
         else
         {
-            tracing::warn!("ClientHandler: received server msg that failed to deserialize");
+            tracing::warn!("received server msg that failed to deserialize");
             return Ok(());  //ignore it
         };
 
         // forward to client owner
         if let Err(err) = self.server_msg_sender.send(server_msg)
         {
-            tracing::error!(?err, "ClientHandler: failed to forward server msg to client");
+            tracing::error!(?err, "failed to forward server msg to client");
             return Err(Box::new(ClientError::SendError));  //client is broken
         }
 
@@ -60,16 +60,18 @@ where
     async fn on_call(&mut self, _msg: ()) -> Result<(), ezsockets::Error>
     {
         // ignore call
-        tracing::error!("ClientHandler: on_call() invocation (not handled)");
+        tracing::error!("on_call() invocation (not handled)");
         Ok(())
     }
 
     /// respond to the client being closed
     //todo: customize behavior on closure reason
-    async fn on_close(&mut self, _close_frame: Option<ezsockets::CloseFrame>)
-    -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
+    async fn on_close(
+        &mut self,
+        _close_frame: Option<ezsockets::CloseFrame>
+    ) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
-        tracing::info!("ClientHandler: closed by ??");
+        tracing::info!("closed by ??");
         Ok(ezsockets::client::ClientCloseMode::Close)
         //Err(Box::new(ClientError::ClosedByServer))  //assume closed by server (todo: maybe closed by client)
     }
@@ -78,7 +80,7 @@ where
     //todo: customize behavior on config
     async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
-        tracing::info!("ClientHandler: disconnected");
+        tracing::info!("disconnected");
         Ok(ezsockets::client::ClientCloseMode::Close)
     }
 }
