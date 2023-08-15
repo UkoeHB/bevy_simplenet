@@ -126,9 +126,7 @@ assert_eq!(msg_server_val, 24);
 
 ## TODOs
 
-- [ezsockets](https://docs.rs/ezsockets/latest/ezsockets/) backend needs to be upgraded to:
-    - remove panics from public interfaces
-    - emit closure reasons from clients
+- Add client connect/disconnect events. Add client status (dead vs reconnecting vs connected).
 - Add reconnect policy to client config.
 - Implement `AuthToken`:
     - client id = hash(client key)

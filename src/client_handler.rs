@@ -66,6 +66,7 @@ where
 
     /// respond to the client being closed
     //todo: customize behavior on closure reason
+    //todo: send close reason to client
     async fn on_close(
         &mut self,
         _close_frame: Option<ezsockets::CloseFrame>

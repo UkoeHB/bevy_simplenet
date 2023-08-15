@@ -19,6 +19,8 @@ where
     ClientMsg: Clone + Debug + Send + Sync + Serialize,
     ConnectMsg: Clone + Debug + Send + Sync + Serialize,
 {
+    /// this client's id
+    client_id: u128,
     /// core websockets client
     client: ezsockets::Client<ClientHandler<ServerMsg>>,
     /// receiver for messages sent by the server
@@ -66,6 +68,12 @@ where
     {
         let Ok(msg) = self.server_msg_receiver.try_recv() else { return None; };
         Some(msg)
+    }
+
+    /// Access this client's id.
+    pub fn id(&self) -> u128
+    {
+        self.client_id
     }
 
     /// Test if client is dead (no longer connected to server and won't reconnect).
@@ -185,6 +193,7 @@ where
 
         // finish assembling our client
         Client{
+                client_id: auth.client_id(),
                 client,
                 server_msg_receiver,
                 client_closed_signal,
