@@ -62,7 +62,7 @@ fn rate_limit_test(max_count_per_period: u32)
             }
         );
 
-    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
+    let websocket_url = websocket_server.url();
 
 
     // make client (block until connected)

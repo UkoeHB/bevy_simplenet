@@ -63,7 +63,7 @@ fn message_size_limit_test(max_msg_size: u32)
             }
         );
 
-    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
+    let websocket_url = websocket_server.url();
 
 
     // 1. prepare message that is too large

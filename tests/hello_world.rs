@@ -73,7 +73,7 @@ fn bevy_simplenet_hello_world()
             }
         );
 
-    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
+    let websocket_url = websocket_server.url();
 
 
 

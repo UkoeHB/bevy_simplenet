@@ -65,7 +65,7 @@ fn connections_limit_test(max_connections: u32)
             }
         );
 
-    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
+    let websocket_url = websocket_server.url();
 
 
     // 1. connect 'max connections' clients

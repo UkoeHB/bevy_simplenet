@@ -65,7 +65,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
     // make client (block until connected)
     let websocket_client = client_demo_factory().new_client(
             client_runtime,
-            bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap(),
+            websocket_server.url(),
             auth_request,
             DemoConnectMsg(String::from("hello"))
         ).extract().unwrap().unwrap();

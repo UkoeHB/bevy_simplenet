@@ -81,7 +81,7 @@ let server = server_factory().new_server(
 let client_id = 0u128;
 let client = client_factory().new_client(
         Arc::new(tokio::runtime::Runtime::new().unwrap()),
-        bevy_simplenet::make_websocket_url(server.address()).unwrap(),
+        server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         ConnectMsg(String::from("hello"))
     ).extract().unwrap().unwrap();  //fails if could not connect to server

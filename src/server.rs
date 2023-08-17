@@ -102,10 +102,10 @@ where
         Some((msg.id, msg.msg))
     }
 
-    /// get the server's address
-    pub fn address(&self) -> SocketAddr
+    /// get the server's url
+    pub fn url(&self) -> url::Url
     {
-        self.server_address
+        make_websocket_url(self.server_address).unwrap()
     }
 
     /// Test if the server is dead.
