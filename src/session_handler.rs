@@ -2,6 +2,7 @@
 use crate::*;
 
 //third-party shortcuts
+use bincode::Options;
 use serde::Deserialize;
 
 //standard shortcuts
@@ -66,7 +67,7 @@ where
             tracing::trace!("received client message that's too large, closing session...");
             self.close("message size violation").await; return Ok(());
         }
-        let Ok(message) = bincode::deserialize::<ClientMsg>(&bytes[..])
+        let Ok(message) = bincode::DefaultOptions::new().deserialize::<ClientMsg>(&bytes[..])
         else
         {
             tracing::trace!("received client message that failed to deserialize, closing session...");

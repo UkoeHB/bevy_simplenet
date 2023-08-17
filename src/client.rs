@@ -3,6 +3,7 @@ use crate::*;
 
 //third-party shortcuts
 use bevy::prelude::Resource;
+use bincode::Options;
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -54,7 +55,7 @@ where
         }
 
         // forward message to server
-        let Ok(ser_msg) = bincode::serialize(msg) else { return Err(()); };
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(msg) else { return Err(()); };
         if let Err(_) = self.client.binary(ser_msg)
         {
             tracing::warn!("tried to send message to dead client");
@@ -138,7 +139,7 @@ where
         connect_msg : ConnectMsg
     ) -> TokioPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
-        tracing::info!("new Client (pending)");
+        tracing::info!("new client pending");
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
         TokioPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(

@@ -120,7 +120,7 @@ assert_eq!(msg_server_val, 24);
 
 ## Bonus
 
-- Exposes `TokioPendingResult<R>()` and `StdPendingResult<R>()` for handling the output of a thread.
+- Provides `TokioPendingResult<R>()` and `StdPendingResult<R>()` utilities for handling thread outputs.
 
 
 
@@ -134,6 +134,7 @@ assert_eq!(msg_server_val, 24);
     - client key signs { auth signature }
 - The server should count connections to better support authentication workflows that use an external service to issue auth tokens only if the server is not over-subscribed. Auth tokens should include an expiration time so disconnected clients can be forced to reconnect via the auth service.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
+- Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs)).
 
 
 
@@ -146,6 +147,6 @@ assert_eq!(msg_server_val, 24);
 ## Bevy compatability
 
 | bevy   | bevy_simplenet |
-|--------|--------------|
-| 0.11.0 | todo         |
-| 0.10.1 | 0.1          |
+|--------|----------------|
+| 0.11.0 | todo           |
+| 0.10.1 | 0.1            |
