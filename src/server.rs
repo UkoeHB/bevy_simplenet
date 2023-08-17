@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 //standard shortcuts
 use core::fmt::Debug;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -20,6 +21,9 @@ where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
     ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
+    /// the server's address
+    server_address: SocketAddr,
+
     /// sends messages to the internal connection handler
     server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
     /// receives reports from the internal connection handler
@@ -96,6 +100,12 @@ where
     {
         let Ok(msg) = self.client_msg_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
+    }
+
+    /// get the server's address
+    pub fn address(&self) -> SocketAddr
+    {
+        self.server_address
     }
 
     /// Test if the server is dead.
@@ -207,6 +217,7 @@ where
 
         // prepare listener
         let connection_listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        let server_address = connection_listener.local_addr().unwrap();
 
         // launch the server core
         let server_clone = server.clone();
@@ -228,6 +239,7 @@ where
         // finish assembling our server
         tracing::info!("new server created");
         Server{
+                server_address,
                 server_msg_sender: server.into(),  //extract the call sender
                 connection_report_receiver,
                 client_msg_receiver,

@@ -43,16 +43,13 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
     let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
     let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
-    // websocket server url
-    let websocket_url = url::Url::parse("ws://127.0.0.1:7004/websocket").expect("invalid websocket url in test");
-
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
     // launch websocket server
-    let _websocket_server = server_demo_factory().new_server(
+    let websocket_server = server_demo_factory().new_server(
             server_runtime,
-            "127.0.0.1:7004",
+            "127.0.0.1:0",
             plain_acceptor,
             authenticator,
             bevy_simplenet::ConnectionConfig{
@@ -68,7 +65,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
     // make client (block until connected)
     let websocket_client = client_demo_factory().new_client(
             client_runtime,
-            websocket_url.clone(),
+            bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap(),
             auth_request,
             DemoConnectMsg(String::from("hello"))
         ).extract().unwrap().unwrap();

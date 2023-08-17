@@ -44,16 +44,13 @@ fn message_size_limit_test(max_msg_size: u32)
     let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
     let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
-    // websocket server url
-    let websocket_url = url::Url::parse("ws://127.0.0.1:7002/websocket").expect("invalid websocket url in test");
-
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
     // launch websocket server
     let websocket_server = server_demo_factory().new_server(
             server_runtime,
-            "127.0.0.1:7002",
+            "127.0.0.1:0",
             plain_acceptor,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ConnectionConfig{
@@ -65,6 +62,8 @@ fn message_size_limit_test(max_msg_size: u32)
                     }
             }
         );
+
+    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
 
 
     // 1. prepare message that is too large
@@ -95,7 +94,7 @@ fn message_size_limit_test(max_msg_size: u32)
     let connect_msg = DemoConnectMsg(String::from(""));
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
-            websocket_url.clone(),
+            websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 4678587u128 },
             connect_msg.clone()
         ).extract().unwrap().unwrap();

@@ -43,16 +43,13 @@ fn rate_limit_test(max_count_per_period: u32)
     let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
     let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
-    // websocket server url
-    let websocket_url = url::Url::parse("ws://127.0.0.1:16817/websocket").expect("invalid websocket url in test");
-
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
     // launch websocket server
     let websocket_server = server_demo_factory().new_server(
             server_runtime,
-            "127.0.0.1:16817",
+            "127.0.0.1:0",
             plain_acceptor,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ConnectionConfig{
@@ -65,13 +62,14 @@ fn rate_limit_test(max_count_per_period: u32)
             }
         );
 
+    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
 
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from("hello!"));
     let websocket_client = client_demo_factory().new_client(
             client_runtime,
-            websocket_url.clone(),
+            websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },
             connect_msg.clone()
         ).extract().unwrap().unwrap();

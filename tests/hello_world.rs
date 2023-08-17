@@ -53,9 +53,6 @@ fn bevy_simplenet_hello_world()
     let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
     let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
-    // websocket server url
-    let websocket_url = url::Url::parse("ws://127.0.0.1:7777/websocket").expect("invalid websocket url in test");
-
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
@@ -63,7 +60,7 @@ fn bevy_simplenet_hello_world()
     tracing::info!("ws hello world test: launching server...");
     let websocket_server = server_demo_factory().new_server(
             server_runtime,
-            "127.0.0.1:7777",
+            "127.0.0.1:0",
             plain_acceptor,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ConnectionConfig{
@@ -75,6 +72,8 @@ fn bevy_simplenet_hello_world()
                     }
             }
         );
+
+    let websocket_url = bevy_simplenet::make_websocket_url(websocket_server.address()).unwrap();
 
 
 

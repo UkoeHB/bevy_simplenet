@@ -5,6 +5,7 @@ use crate::*;
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::net::SocketAddr;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -75,6 +76,19 @@ pub(crate) enum SessionCommand<ServerMsg: Debug + Clone>
 {
     SendMsg(ServerMsg),
     Close(ezsockets::CloseFrame)
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Make a websocket url: ws://[ip:port]/websocket.
+pub fn make_websocket_url(address: SocketAddr) -> Result<url::Url, ()>
+{
+    let mut url = url::Url::parse("https://example.net").map_err(|_| ())?;
+    url.set_scheme("ws")?;
+    url.set_ip_host(address.ip())?;
+    url.set_port(Some(address.port()))?;
+    url.set_path("/websocket");
+    Ok(url)
 }
 
 //-------------------------------------------------------------------------------------------------------------------

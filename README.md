@@ -63,7 +63,7 @@ tracing::info!("README test start");
 // make a server
 let server = server_factory().new_server(
         Arc::new(tokio::runtime::Runtime::new().unwrap()),
-        "127.0.0.1:57633",
+        "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
         bevy_simplenet::ConnectionConfig{
@@ -81,7 +81,7 @@ let server = server_factory().new_server(
 let client_id = 0u128;
 let client = client_factory().new_client(
         Arc::new(tokio::runtime::Runtime::new().unwrap()),
-        url::Url::parse("ws://127.0.0.1:57633/websocket").expect("invalid websocket url"),
+        bevy_simplenet::make_websocket_url(server.address()).unwrap(),
         bevy_simplenet::AuthRequest::None{ client_id },
         ConnectMsg(String::from("hello"))
     ).extract().unwrap().unwrap();  //fails if could not connect to server
@@ -114,6 +114,17 @@ std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async mach
 // read message from server
 let ServerMsg(msg_server_val) = client.try_get_next_msg().unwrap();
 assert_eq!(msg_server_val, 24);
+
+
+// client closes itself
+client.close();
+std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+
+
+// read disconnection message
+let bevy_simplenet::ConnectionReport::Disconnected(client_id) =
+    server.try_get_next_connection_report().unwrap()
+else { panic!("received connected report"); };
 ```
 
 
