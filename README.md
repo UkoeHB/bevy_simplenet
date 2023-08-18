@@ -66,7 +66,7 @@ let server = server_factory().new_server(
         "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
-        bevy_simplenet::ConnectionConfig{
+        bevy_simplenet::ServerConnectionConfig{
             max_connections   : 10,
             max_msg_size      : 10_000,
             rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -83,15 +83,19 @@ let client = client_factory().new_client(
         Arc::new(tokio::runtime::Runtime::new().unwrap()),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
+        bevy_simplenet::ClientConnectionConfig::default(),
         ConnectMsg(String::from("hello"))
     ).extract().unwrap().unwrap();  //fails if could not connect to server
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 
-// read connection message
-let bevy_simplenet::ConnectionReport::Connected(client_id, connect_msg) =
+// read connection messages
+let bevy_simplenet::ServerConnectionReport::Connected(client_id, connect_msg) =
     server.try_get_next_connection_report().unwrap()
-else { panic!("received disconnected report"); };
+else { panic!("client not connected to server"); };
+let bevy_simplenet::ClientConnectionReport::Connected =
+    client.try_get_next_connection_report().unwrap()
+else { panic!("client not connected to server"); };
 assert_eq!(connect_msg.0, String::from("hello"));
 
 
@@ -121,10 +125,13 @@ client.close();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 
-// read disconnection message
-let bevy_simplenet::ConnectionReport::Disconnected(client_id) =
+// read disconnection messages
+let bevy_simplenet::ClientConnectionReport::ClosedBySelf =
+    client.try_get_next_connection_report().unwrap()
+else { panic!("client not closed by self"); };
+let bevy_simplenet::ServerConnectionReport::Disconnected(client_id) =
     server.try_get_next_connection_report().unwrap()
-else { panic!("received connected report"); };
+else { panic!("client not disconnected"); };
 ```
 
 
@@ -137,15 +144,13 @@ else { panic!("received connected report"); };
 
 ## TODOs
 
-- Add client connect/disconnect events. Add client status (dead vs reconnecting vs connected).
-- Add reconnect policy to client config.
 - Implement `AuthToken`:
     - client id = hash(client key)
     - auth key signs { client id, token expiry }
     - client key signs { auth signature }
 - The server should count connections to better support authentication workflows that use an external service to issue auth tokens only if the server is not over-subscribed. Auth tokens should include an expiration time so disconnected clients can be forced to reconnect via the auth service.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
-- Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs)).
+- Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs) or [this crate](https://docs.rs/ws_stream_wasm/latest/ws_stream_wasm/)).
 
 
 

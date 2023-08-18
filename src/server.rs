@@ -27,7 +27,7 @@ where
     /// sends messages to the internal connection handler
     server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
     /// receives reports from the internal connection handler
-    connection_report_receiver: crossbeam::channel::Receiver<ConnectionReport<ConnectMsg>>,
+    connection_report_receiver: crossbeam::channel::Receiver<ServerConnectionReport<ConnectMsg>>,
     /// receives client messages from the internal connection handler
     client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
 
@@ -88,7 +88,7 @@ where
     }
 
     /// Try to get the next available connection report.
-    pub fn try_get_next_connection_report(&self) -> Option<ConnectionReport<ConnectMsg>>
+    pub fn try_get_next_connection_report(&self) -> Option<ServerConnectionReport<ConnectMsg>>
     {
         //todo: count connections
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
@@ -148,7 +148,7 @@ where
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
-        config              : ConnectionConfig,
+        config              : ServerConnectionConfig,
     ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
@@ -176,7 +176,7 @@ where
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
-        config              : ConnectionConfig
+        config              : ServerConnectionConfig
     ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
@@ -185,7 +185,7 @@ where
         let (
                 connection_report_sender,
                 connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ConnectionReport<ConnectMsg>>();
+            ) = crossbeam::channel::unbounded::<ServerConnectionReport<ConnectMsg>>();
         let (
                 client_msg_sender,
                 client_msg_receiver

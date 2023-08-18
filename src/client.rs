@@ -24,6 +24,10 @@ where
     client_id: u128,
     /// core websockets client
     client: ezsockets::Client<ClientHandler<ServerMsg>>,
+    /// sender for connection events (used for 'closed by self')
+    connection_report_sender: crossbeam::channel::Sender<ClientConnectionReport>,
+    /// receiver for connection events
+    connection_report_receiver: crossbeam::channel::Receiver<ClientConnectionReport>,
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
@@ -71,6 +75,13 @@ where
         Some(msg)
     }
 
+    /// Try to get next client connection report.
+    pub fn try_get_next_connection_report(&self) -> Option<ClientConnectionReport>
+    {
+        let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
+        Some(msg)
+    }
+
     /// Access this client's id.
     pub fn id(&self) -> u128
     {
@@ -86,12 +97,11 @@ where
     /// Close the client.
     pub fn close(&self)
     {
-        if self.is_dead()
-        {
-            tracing::warn!("tried to close an already dead client");
-            return;
-        }
+        // sanity check
+        if self.is_dead() { tracing::warn!("tried to close an already dead client"); return; }
         tracing::info!("client closing self");
+
+        // close the client
         let closure_frame =
             ezsockets::CloseFrame{
                 code   : ezsockets::CloseCode::Normal,
@@ -100,6 +110,13 @@ where
         if self.client.close(Some(closure_frame)).is_err()
         {
             tracing::warn!("tried to close an already dead client");
+            return;
+        }
+
+        // forward event to other end of channel
+        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::ClosedBySelf)
+        {
+            tracing::error!(?err, "failed to forward connection event to client");
         }
     }
 }
@@ -133,10 +150,11 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime     : Arc<tokio::runtime::Runtime>,
-        url         : url::Url,
-        auth        : AuthRequest,
-        connect_msg : ConnectMsg
+        runtime                  : Arc<tokio::runtime::Runtime>,
+        url                      : url::Url,
+        auth                     : AuthRequest,
+        client_connection_config : ClientConnectionConfig,
+        connect_msg              : ConnectMsg,
     ) -> TokioPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
@@ -148,7 +166,8 @@ where
                                 Some(runtime_clone),
                                 url,
                                 auth,
-                                connect_msg
+                                client_connection_config,
+                                connect_msg,
                             ).await
                     } )
             )
@@ -157,10 +176,11 @@ where
     /// New client (async).
     /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_client_async(&self,
-        _runtime    : Option<Arc<tokio::runtime::Runtime>>,
-        url         : url::Url,
-        auth        : AuthRequest,
-        connect_msg : ConnectMsg
+        _runtime                 : Option<Arc<tokio::runtime::Runtime>>,
+        url                      : url::Url,
+        auth                     : AuthRequest,
+        client_connection_config : ClientConnectionConfig,
+        connect_msg              : ConnectMsg,
     ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
     {
         // prepare to make client connection
@@ -173,12 +193,24 @@ where
             .header(AUTH_MSG_HEADER, auth_msg_ser.as_str())
             .header(CONNECT_MSG_HEADER, connect_msg_ser.as_str());
 
-        // prepare message channel that points out of our client
+        // prepare message channels that point out of our client
+        let (
+                connection_report_sender,
+                connection_report_receiver
+            ) = crossbeam::channel::unbounded::<ClientConnectionReport>();
         let (server_msg_sender, server_msg_receiver) = crossbeam::channel::unbounded::<ServerMsg>();
 
         // make client core with our handler
+        let connection_report_sender_clone = connection_report_sender.clone();
         let (client, client_handler_worker) = ezsockets::connect(
-                move |_client| { ClientHandler::<ServerMsg>{ server_msg_sender } },
+                move |_client|
+                {
+                    ClientHandler::<ServerMsg>{
+                            config                   : client_connection_config,
+                            connection_report_sender : connection_report_sender_clone,
+                            server_msg_sender
+                        }
+                },
                 client_config
             ).await;
 
@@ -196,6 +228,8 @@ where
         Client{
                 client_id: auth.client_id(),
                 client,
+                connection_report_sender,
+                connection_report_receiver,
                 server_msg_receiver,
                 client_closed_signal,
                 _runtime,

@@ -8,7 +8,6 @@
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Handle for the result of async work (performed in a std::thread).
-/// - The result will hang if the associated runtime is shut down.
 #[derive(Debug)]
 pub struct StdPendingResult<R>
 {

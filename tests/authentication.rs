@@ -1,5 +1,6 @@
 //local shortcuts
 
+use bevy_simplenet::ClientConnectionConfig;
 //third-party shortcuts
 use serde::{Serialize, Deserialize};
 
@@ -52,7 +53,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             "127.0.0.1:0",
             plain_acceptor,
             authenticator,
-            bevy_simplenet::ConnectionConfig{
+            bevy_simplenet::ServerConnectionConfig{
                 max_connections   : 10,
                 max_msg_size      : 10_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -67,6 +68,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             client_runtime,
             websocket_server.url(),
             auth_request,
+            ClientConnectionConfig::default(),
             DemoConnectMsg(String::from("hello"))
         ).extract().unwrap().unwrap();
 

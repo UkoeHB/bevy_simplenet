@@ -2,6 +2,7 @@
 use crate::*;
 
 //third-party shortcuts
+use bincode::Options;
 use serde::Deserialize;
 
 //standard shortcuts
@@ -12,6 +13,10 @@ use std::vec::Vec;
 
 pub(crate) struct ClientHandler<ServerMsg>
 {
+    /// config
+    pub(crate) config: ClientConnectionConfig,
+    /// collects connection events
+    pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientConnectionReport>,
     /// collects messages from the server
     pub(crate) server_msg_sender: crossbeam::channel::Sender<ServerMsg>,
 }
@@ -38,7 +43,7 @@ where
         tracing::trace!("received binary from server");
 
         // deserialize message
-        let Ok(server_msg) = bincode::deserialize::<ServerMsg>(&bytes[..])
+        let Ok(server_msg) = bincode::DefaultOptions::new().deserialize::<ServerMsg>(&bytes[..])
         else
         {
             tracing::warn!("received server msg that failed to deserialize");
@@ -64,25 +69,59 @@ where
         Ok(())
     }
 
-    /// respond to the client being closed
-    //todo: customize behavior on closure reason
-    //todo: send close reason to client
-    async fn on_close(
-        &mut self,
-        _close_frame: Option<ezsockets::CloseFrame>
-    ) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
+    /// respond to the client acquiring a connection
+    async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
-        tracing::info!("closed by ??");
-        Ok(ezsockets::client::ClientCloseMode::Close)
-        //Err(Box::new(ClientError::ClosedByServer))  //assume closed by server (todo: maybe closed by client)
+        // forward event to client owner
+        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::Connected)
+        {
+            tracing::error!(?err, "failed to forward connection event to client");
+            return Err(Box::new(ClientError::SendError));  //client is broken
+        }
+        Ok(())
     }
 
     /// respond to the client being disconnected
-    //todo: customize behavior on config
     async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
         tracing::info!("disconnected");
-        Ok(ezsockets::client::ClientCloseMode::Close)
+
+        // forward event to client owner
+        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::Disconnected)
+        {
+            tracing::error!(?err, "failed to forward connection event to client");
+            return Err(Box::new(ClientError::SendError));  //client is broken
+        }
+
+        // choose response
+        match self.config.reconnect_on_disconnect
+        {
+            true  => return Ok(ezsockets::client::ClientCloseMode::Reconnect),
+            false => return Ok(ezsockets::client::ClientCloseMode::Close),
+        }
+    }
+
+    /// respond to the client being closed by the server
+    async fn on_close(
+        &mut self,
+        close_frame: Option<ezsockets::CloseFrame>
+    ) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
+    {
+        tracing::info!(?close_frame, "closed by server");
+
+        // forward event to client owner
+        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::ClosedByServer(close_frame))
+        {
+            tracing::error!(?err, "failed to forward connection event to client");
+            return Err(Box::new(ClientError::SendError));  //client is broken
+        }
+
+        // choose response
+        match self.config.reconnect_on_server_close
+        {
+            true  => return Ok(ezsockets::client::ClientCloseMode::Reconnect),
+            false => return Ok(ezsockets::client::ClientCloseMode::Close),
+        }
     }
 }
 

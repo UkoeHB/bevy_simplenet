@@ -21,7 +21,7 @@ pub(crate) const CONNECT_MSG_HEADER: &'static str = "WSC-connect";
 
 /// Emitted by servers when a client connects/disconnects.
 #[derive(Debug, Clone)]
-pub enum ConnectionReport<ConnectMsg: Debug + Clone>
+pub enum ServerConnectionReport<ConnectMsg: Debug + Clone>
 {
     Connected(SessionID, ConnectMsg),
     Disconnected(SessionID)
@@ -31,7 +31,7 @@ pub enum ConnectionReport<ConnectMsg: Debug + Clone>
 
 /// Server-enforced constraints on client connections.
 #[derive(Debug)]
-pub struct ConnectionConfig
+pub struct ServerConnectionConfig
 {
     /// Max number of concurrent client connections.
     pub max_connections: u32,
@@ -39,6 +39,41 @@ pub struct ConnectionConfig
     pub max_msg_size: u32,
     /// Rate limit for messages received from a session.
     pub rate_limit_config: RateLimitConfig
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Emitted by clients when they connect/disconnect.
+#[derive(Debug, Clone)]
+pub enum ClientConnectionReport
+{
+    Connected,
+    Disconnected,
+    ClosedByServer(Option<ezsockets::CloseFrame>),
+    ClosedBySelf,
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Config controlling how clients respond to connection events
+#[derive(Debug)]
+pub struct ClientConnectionConfig
+{
+    /// Try to reconnect if the client is disconnected (`true` by default).
+    pub reconnect_on_disconnect: bool,
+    /// Try to reconnect if the client is closed by the server (`false` by default).
+    pub reconnect_on_server_close: bool,
+}
+
+impl Default for ClientConnectionConfig
+{
+    fn default() -> ClientConnectionConfig
+    {
+        ClientConnectionConfig{
+                reconnect_on_disconnect   : true,
+                reconnect_on_server_close : false,
+            }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
