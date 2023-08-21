@@ -17,10 +17,9 @@ mod pending_result_defaults;
 mod rate_limiter;
 mod result_receiver;
 mod runtime;
+mod runtime_defaults;
 mod server;
 mod session_handler;
-mod std_pending_result;
-mod tokio_pending_result;
 
 #[cfg(not(wasm))]
 mod runtime_impl_native;
@@ -40,10 +39,9 @@ pub use crate::pending_result_defaults::*;
 pub use crate::rate_limiter::*;
 pub use crate::result_receiver::*;
 pub use crate::runtime::*;
+pub use crate::runtime_defaults::*;
 pub use crate::server::*;
 pub(crate) use crate::session_handler::*;
-pub use crate::std_pending_result::*;
-pub use crate::tokio_pending_result::*;
 
 #[cfg(not(wasm))]
 pub use crate::runtime_impl_native::*;

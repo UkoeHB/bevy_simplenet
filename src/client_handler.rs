@@ -11,6 +11,7 @@ use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub(crate) struct ClientHandler<ServerMsg>
 {
     /// config

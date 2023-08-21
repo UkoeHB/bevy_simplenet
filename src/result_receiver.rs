@@ -33,6 +33,7 @@ pub trait ResultReceiver
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct OneshotResultReceiver<Rt, R>
 {
     oneshot: futures::channel::oneshot::Receiver<Option<R>>,
@@ -83,6 +84,7 @@ where
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct SimpleResultReceiver<Rt: SimpleRuntime<R>, R>
 {
     handle: <Rt as SimpleRuntime<R>>::Future,

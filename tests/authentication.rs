@@ -63,13 +63,13 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
         );
 
     // make client (block until connected)
-    let websocket_client = client_demo_factory().new_client(
+    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime,
             websocket_server.url(),
             auth_request,
             bevy_simplenet::ClientConnectionConfig::default(),
             DemoConnectMsg(String::from("hello"))
-        ).extract().unwrap().unwrap();
+        ).extract() else { panic!(""); };
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

@@ -9,6 +9,7 @@ use crate::*;
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Result of a 'pending result'.
+#[derive(Debug)]
 pub enum PRResult<R>
 {
     /// Result has already been taken.

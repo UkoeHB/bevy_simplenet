@@ -79,13 +79,13 @@ let server = server_factory().new_server(
 
 // make a client
 let client_id = 0u128;
-let client = client_factory().new_client(
+let bevy_simplenet::PRResult::Result(client) = client_factory().new_client(
         Arc::new(tokio::runtime::Runtime::new().unwrap()),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConnectionConfig::default(),
         ConnectMsg(String::from("hello"))
-    ).extract().unwrap().unwrap();  //fails if could not connect to server
+    ).extract() else { panic!("failed connecting to server"); };
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 

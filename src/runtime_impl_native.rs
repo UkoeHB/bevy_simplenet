@@ -4,17 +4,18 @@ use crate::*;
 //third-party shortcuts
 
 //standard shortcuts
-
+use std::fmt::Debug;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct TokioRuntime<R>
 {
     handle: tokio::runtime::Handle,
     _phantom: std::marker::PhantomData<R>,
 }
 
-impl<R: Send + 'static> SimpleRuntime<R> for TokioRuntime<R>
+impl<R: Debug + Send + 'static> SimpleRuntime<R> for TokioRuntime<R>
 {
     type Error = tokio::task::JoinError;
     type Future = tokio::task::JoinHandle<R>;
@@ -49,8 +50,25 @@ impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntime<R>
     }
 }
 
+impl<R: Send + 'static> From<tokio::runtime::Handle> for TokioRuntime<R>
+{
+    fn from(handle: tokio::runtime::Handle) -> Self
+    {
+        TokioRuntime::<R>{ handle, _phantom: std::marker::PhantomData::<R>::default() }
+    }
+}
+
+impl<R: Send + 'static> From<&tokio::runtime::Handle> for TokioRuntime<R>
+{
+    fn from(handle: &tokio::runtime::Handle) -> Self
+    {
+        Self::from(handle.clone())
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct StdRuntime;
 
 impl OneshotRuntime for StdRuntime
@@ -64,17 +82,17 @@ impl OneshotRuntime for StdRuntime
     }
 }
 
-impl From<()> for StdRuntime
+impl From<EmptyRuntime> for StdRuntime
 {
-    fn from(_: ()) -> Self
+    fn from(_: EmptyRuntime) -> Self
     {
         StdRuntime{}
     }
 }
 
-impl From<()> for &StdRuntime
+impl From<EmptyRuntime> for &StdRuntime
 {
-    fn from(_: ()) -> Self
+    fn from(_: EmptyRuntime) -> Self
     {
         &StdRuntime{}
     }

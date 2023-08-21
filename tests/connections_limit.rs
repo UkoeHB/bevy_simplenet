@@ -75,13 +75,13 @@ fn connections_limit_test(max_connections: u32)
     for client_num in 0..max_connections
     {
         // make client (block until connected)
-        let websocket_client = client_demo_factory().new_client(
+        let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
                 client_runtime.clone(),
                 websocket_url.clone(),
                 bevy_simplenet::AuthRequest::None{ client_id: client_num as u128 },
                 bevy_simplenet::ClientConnectionConfig::default(),
                 connect_msg.clone()
-            ).extract().unwrap().unwrap();
+            ).extract() else { panic!(""); };
 
         std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -97,13 +97,13 @@ fn connections_limit_test(max_connections: u32)
 
     // 2. connecting one more client should fail
     // make client (block until connected)
-    let websocket_client = client_demo_factory().new_client(
+    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 92748u128 },
             bevy_simplenet::ClientConnectionConfig::default(),
             connect_msg.clone()
-        ).extract().unwrap().unwrap();
+        ).extract() else { panic!(""); };
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -129,13 +129,13 @@ fn connections_limit_test(max_connections: u32)
 
     // 4. adding a client should now succeed
     // make client (block until connected)
-    let websocket_client = client_demo_factory().new_client(
+    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 64819u128 },
             bevy_simplenet::ClientConnectionConfig::default(),
             connect_msg.clone()
-        ).extract().unwrap().unwrap();
+        ).extract() else { panic!(""); };
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -150,13 +150,13 @@ fn connections_limit_test(max_connections: u32)
 
     // 5. connecting one more client should fail
     // make client (block until connected)
-    let websocket_client = client_demo_factory().new_client(
+    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 15364898u128 },
             bevy_simplenet::ClientConnectionConfig::default(),
             connect_msg.clone()
-        ).extract().unwrap().unwrap();
+        ).extract() else { panic!(""); };
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

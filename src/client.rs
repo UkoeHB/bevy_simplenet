@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Resource)]
+#[derive(Debug, Resource)]
 pub struct Client<ServerMsg, ClientMsg, ConnectMsg>
 where
     ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
@@ -31,10 +31,10 @@ where
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
-    client_closed_signal: TokioPendingResult<()>,
+    client_closed_signal: DefaultIOPendingResult<()>,
 
-    /// cached runtime to ensure client remains operational (optional)
-    _runtime: Option<Arc<tokio::runtime::Runtime>>,
+    /// cached runtime to ensure client remains operational
+    _runtime: Arc<DefaultIORuntime>,
 
     /// phantom
     _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
@@ -150,33 +150,34 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime                  : Arc<tokio::runtime::Runtime>,
+        runtime                  : Arc<DefaultIORuntime>,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
         connect_msg              : ConnectMsg,
-    ) -> TokioPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
+    ) -> DefaultIOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
-        TokioPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
-                runtime.spawn( async move {
-                        factory_clone.new_client_async(
-                                Some(runtime_clone),
-                                url,
-                                auth,
-                                client_connection_config,
-                                connect_msg,
-                            ).await
-                    } )
+        DefaultIOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
+                &runtime.handle().into(),
+                async move {
+                    factory_clone.new_client_async(
+                            runtime_clone,
+                            url,
+                            auth,
+                            client_connection_config,
+                            connect_msg,
+                        ).await
+                }
             )
     }
 
     /// New client (async).
     /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_client_async(&self,
-        _runtime                 : Option<Arc<tokio::runtime::Runtime>>,
+        runtime                  : Arc<DefaultIORuntime>,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
@@ -215,14 +216,15 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = TokioPendingResult::<()>::new(tokio::spawn(
+        let client_closed_signal = DefaultIOPendingResult::<()>::new(
+                &runtime.handle().into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {
                         tracing::error!(err, "client closed with error");
                     }
                 }
-            ));
+            );
 
         // finish assembling our client
         Client{
@@ -232,7 +234,7 @@ where
                 connection_report_receiver,
                 server_msg_receiver,
                 client_closed_signal,
-                _runtime,
+                _runtime: runtime,
                 _phantom: PhantomData::default(),
             }
     }

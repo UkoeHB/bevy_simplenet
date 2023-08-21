@@ -7,6 +7,7 @@
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct WasmIORuntime;
 
 impl OneshotRuntime for WasmIORuntime
@@ -26,17 +27,17 @@ impl OneshotRuntime for WasmIORuntime
     }
 }
 
-impl From<()> for WasmIORuntime
+impl From<EmptyRuntime> for WasmIORuntime
 {
-    fn from(_: ()) -> Self
+    fn from(_: EmptyRuntime) -> Self
     {
         WasmIORuntime{}
     }
 }
 
-impl From<()> for &WasmIORuntime
+impl From<EmptyRuntime> for &WasmIORuntime
 {
-    fn from(_: ()) -> Self
+    fn from(_: EmptyRuntime) -> Self
     {
         WasmIORuntime{}
     }

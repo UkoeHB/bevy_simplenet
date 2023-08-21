@@ -3,11 +3,11 @@
 //third-party shortcuts
 
 //standard shortcuts
-
+use std::fmt::Debug;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub trait OneshotRuntime: Send + 'static
+pub trait OneshotRuntime: Debug + Send + 'static
 {
     fn spawn<F>(&self, task: F)
     where
@@ -17,10 +17,10 @@ pub trait OneshotRuntime: Send + 'static
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub trait SimpleRuntime<R>: Send + 'static
+pub trait SimpleRuntime<R>: Debug + Send + 'static
 {
     type Error;
-    type Future: std::future::Future<Output = Result<R, Self::Error>> + Send + 'static;
+    type Future: std::future::Future<Output = Result<R, Self::Error>> + Debug + Send + 'static;
 
     fn spawn<F>(&self, task: F) -> Self::Future
     where

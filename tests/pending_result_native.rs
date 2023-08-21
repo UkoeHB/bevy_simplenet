@@ -24,7 +24,7 @@ fn pending_result_native_cpu()
     let task = async { dbg!("task ran"); };
 
     // spawn task
-    let mut pending_result = DefaultCPUPendingResult::<()>::new((), task);
+    let mut pending_result = DefaultCPUPendingResult::<()>::new(DefaultCPURuntime{}, task);
 
     // wait for task
     let PRResult::Result(_) = pending_result.extract() else { panic!(""); };

@@ -1,5 +1,4 @@
 //local shortcuts
-use crate::*;
 
 //third-party shortcuts
 
@@ -13,8 +12,8 @@ use crate::*;
 mod envmod
 {
     use crate::*;
-    pub(super) type DefaultIOReceiver<R>  = SimpleResultReceiver<TokioRuntime<R>, R>;
-    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<StdRuntime, R>;
+    pub(super) type DefaultIORuntime  = tokio::runtime::Runtime;
+    pub(super) type DefaultCPURuntime = EmptyRuntime;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -23,15 +22,15 @@ mod envmod
 #[cfg(wasm)]
 mod envmod
 {
-    use crate::*;
-    pub(super) type DefaultIOReceiver<R>  = OneshotResultReceiver<WasmIORuntime, R>;
-    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<WasmIORuntime, R>;
+    pub(super) type DefaultIORuntime  = EmptyRuntime;
+    pub(super) type DefaultCPURuntime = EmptyRuntime;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-pub type DefaultIOPendingResult<R>  = PendingResult<envmod::DefaultIOReceiver<R>>;
-pub type DefaultCPUPendingResult<R> = PendingResult<envmod::DefaultCPUReceiver<R>>;
+pub struct EmptyRuntime;
+pub type DefaultIORuntime  = envmod::DefaultIORuntime;
+pub type DefaultCPURuntime = envmod::DefaultCPURuntime;
 
 //-------------------------------------------------------------------------------------------------------------------
