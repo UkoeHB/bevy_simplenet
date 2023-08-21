@@ -11,7 +11,8 @@
 #[cfg(not(wasm))]
 mod envmod
 {
-    use crate::*;
+    /// Default IO runtime (tokio).
+    /// If you access this via `::default()`, you will get a handle to a statically-initialized tokio runtime.
     #[derive(Clone)]
     pub struct DefaultIORuntime(pub tokio::runtime::Handle);
 
@@ -30,39 +31,33 @@ mod envmod
         }
     }
 
-    impl From<DefaultIORuntime> for tokio::runtime::Handle
-    {
-        fn from(runtime: DefaultIORuntime) -> Self
-        {
+    impl From<DefaultIORuntime> for tokio::runtime::Handle {
+        fn from(runtime: DefaultIORuntime) -> Self {
             runtime.0
         }
     }
 
-    impl From<&DefaultIORuntime> for tokio::runtime::Handle
-    {
-        fn from(runtime: &DefaultIORuntime) -> Self
-        {
+    impl From<&DefaultIORuntime> for tokio::runtime::Handle {
+        fn from(runtime: &DefaultIORuntime) -> Self {
             runtime.0.clone()
         }
     }
 
-    impl From<tokio::runtime::Handle> for DefaultIORuntime
-    {
-        fn from(handle: tokio::runtime::Handle) -> Self
-        {
+    impl From<tokio::runtime::Handle> for DefaultIORuntime {
+        fn from(handle: tokio::runtime::Handle) -> Self {
             Self(handle)
         }
     }
 
-    impl From<&tokio::runtime::Handle> for DefaultIORuntime
-    {
-        fn from(handle: &tokio::runtime::Handle) -> Self
-        {
+    impl From<&tokio::runtime::Handle> for DefaultIORuntime {
+        fn from(handle: &tokio::runtime::Handle) -> Self {
             Self(handle.clone())
         }
     }
 
-    pub type DefaultCPURuntime = EmptyRuntime;
+    /// Default CPU runtime (unspecified)
+    #[derive(Default)]
+    pub struct DefaultCPURuntime;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -72,16 +67,17 @@ mod envmod
 mod envmod
 {
     use crate::*;
-    pub type DefaultIORuntime  = EmptyRuntime;
-    pub type DefaultCPURuntime = EmptyRuntime;
+
+    /// Default CPU runtime (unspecified)
+    #[derive(Default)]
+    pub struct DefaultIORuntime;
+
+    /// Default CPU runtime (unspecified)
+    #[derive(Default)]
+    pub struct DefaultCPURuntime;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Default)]
-pub struct EmptyRuntime;
-
 //-------------------------------------------------------------------------------------------------------------------
 
 pub type DefaultIORuntime  = envmod::DefaultIORuntime;

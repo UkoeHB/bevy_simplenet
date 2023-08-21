@@ -7,6 +7,9 @@
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Implements `OneshotRuntime` for `wasm` runtimes (spawn on local thread).
+/// If no other type implements `DefaultIORuntime`, this is the default IO runtime on WASM builds.
+/// If no other type implements `DefaultCPURuntime`, this is the default CPU runtime on WASM builds.
 #[derive(Debug)]
 pub struct WasmIORuntime;
 
@@ -27,19 +30,28 @@ impl OneshotRuntime for WasmIORuntime
     }
 }
 
-impl From<EmptyRuntime> for WasmIORuntime
-{
-    fn from(_: EmptyRuntime) -> Self
-    {
+impl From<DefaultIORuntime> for WasmIORuntime {
+    fn from(_: DefaultIORuntime) -> Self {
         WasmIORuntime{}
     }
 }
 
-impl From<EmptyRuntime> for &WasmIORuntime
-{
-    fn from(_: EmptyRuntime) -> Self
-    {
+impl From<DefaultIORuntime> for &WasmIORuntime {
+    fn from(_: DefaultIORuntime) -> Self {
         WasmIORuntime{}
     }
 }
+
+impl From<DefaultCPURuntime> for WasmIORuntime {
+    fn from(_: DefaultCPURuntime) -> Self {
+        WasmIORuntime{}
+    }
+}
+
+impl From<DefaultCPURuntime> for &WasmIORuntime {
+    fn from(_: DefaultCPURuntime) -> Self {
+        WasmIORuntime{}
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------
