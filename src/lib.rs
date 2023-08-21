@@ -12,11 +12,21 @@ mod client_handler;
 mod common;
 mod connection_handler;
 mod errors;
+mod pending_result;
 mod rate_limiter;
+mod result_receiver;
+mod result_receiver_defaults;
+mod runtime;
 mod server;
 mod session_handler;
 mod std_pending_result;
 mod tokio_pending_result;
+
+#[cfg(not(wasm))]
+mod runtime_impl_native;
+
+#[cfg(wasm)]
+mod runtime_impl_wasm;
 
 //API exports
 pub use crate::authentication::*;
@@ -25,8 +35,18 @@ pub(crate) use crate::client_handler::*;
 pub use crate::common::*;
 pub(crate) use crate::connection_handler::*;
 pub(crate) use crate::errors::*;
+pub use crate::pending_result::*;
 pub use crate::rate_limiter::*;
+pub use crate::result_receiver::*;
+pub use crate::result_receiver_defaults::*;
+pub use crate::runtime::*;
 pub use crate::server::*;
 pub(crate) use crate::session_handler::*;
 pub use crate::std_pending_result::*;
 pub use crate::tokio_pending_result::*;
+
+#[cfg(not(wasm))]
+pub use crate::runtime_impl_native::*;
+
+#[cfg(wasm)]
+pub use crate::runtime_impl_wasm::*;
