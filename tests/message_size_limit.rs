@@ -4,7 +4,6 @@
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
-use std::sync::Arc;
 use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -41,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn message_size_limit_test(max_msg_size: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
-    let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
+    let server_runtime = bevy_simplenet::DefaultIORuntime::default();
+    let client_runtime = bevy_simplenet::DefaultIORuntime::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;

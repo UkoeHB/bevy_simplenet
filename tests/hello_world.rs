@@ -4,7 +4,7 @@
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
-use std::sync::Arc;
+
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -50,8 +50,8 @@ fn bevy_simplenet_hello_world()
     */
 
     // prepare tokio runtimes for server and client
-    let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
-    let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
+    let server_runtime = bevy_simplenet::DefaultIORuntime::default();
+    let client_runtime = bevy_simplenet::DefaultIORuntime::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;

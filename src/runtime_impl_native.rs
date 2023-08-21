@@ -8,14 +8,15 @@ use std::fmt::Debug;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Implements `SimpleRuntime` for `tokio` runtimes.
 #[derive(Debug)]
-pub struct TokioRuntime<R>
+pub struct TokioRuntimeImpl<R>
 {
     handle: tokio::runtime::Handle,
     _phantom: std::marker::PhantomData<R>,
 }
 
-impl<R: Debug + Send + 'static> SimpleRuntime<R> for TokioRuntime<R>
+impl<R: Debug + Send + 'static> SimpleRuntime<R> for TokioRuntimeImpl<R>
 {
     type Error = tokio::task::JoinError;
     type Future = tokio::task::JoinHandle<R>;
@@ -34,7 +35,7 @@ impl<R: Debug + Send + 'static> SimpleRuntime<R> for TokioRuntime<R>
     }
 }
 
-impl<R: Send + 'static> From<tokio::runtime::Runtime> for TokioRuntime<R>
+impl<R: Send + 'static> From<tokio::runtime::Runtime> for TokioRuntimeImpl<R>
 {
     fn from(runtime: tokio::runtime::Runtime) -> Self
     {
@@ -42,23 +43,23 @@ impl<R: Send + 'static> From<tokio::runtime::Runtime> for TokioRuntime<R>
     }
 }
 
-impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntime<R>
+impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntimeImpl<R>
 {
     fn from(runtime: &tokio::runtime::Runtime) -> Self
     {
-        TokioRuntime::<R>{ handle: runtime.handle().clone(), _phantom: std::marker::PhantomData::<R>::default() }
+        TokioRuntimeImpl::<R>{ handle: runtime.handle().clone(), _phantom: std::marker::PhantomData::<R>::default() }
     }
 }
 
-impl<R: Send + 'static> From<tokio::runtime::Handle> for TokioRuntime<R>
+impl<R: Send + 'static> From<tokio::runtime::Handle> for TokioRuntimeImpl<R>
 {
     fn from(handle: tokio::runtime::Handle) -> Self
     {
-        TokioRuntime::<R>{ handle, _phantom: std::marker::PhantomData::<R>::default() }
+        TokioRuntimeImpl::<R>{ handle, _phantom: std::marker::PhantomData::<R>::default() }
     }
 }
 
-impl<R: Send + 'static> From<&tokio::runtime::Handle> for TokioRuntime<R>
+impl<R: Send + 'static> From<&tokio::runtime::Handle> for TokioRuntimeImpl<R>
 {
     fn from(handle: &tokio::runtime::Handle) -> Self
     {
@@ -66,12 +67,29 @@ impl<R: Send + 'static> From<&tokio::runtime::Handle> for TokioRuntime<R>
     }
 }
 
+impl<R: Send + 'static> From<DefaultIORuntime> for TokioRuntimeImpl<R>
+{
+    fn from(handle: DefaultIORuntime) -> Self
+    {
+        TokioRuntimeImpl::<R>::from(tokio::runtime::Handle::from(handle))
+    }
+}
+
+impl<R: Send + 'static> From<&DefaultIORuntime> for TokioRuntimeImpl<R>
+{
+    fn from(handle: &DefaultIORuntime) -> Self
+    {
+        Self::from(handle.clone())
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Implements `OneshotRuntime` for `std` runtimes.
 #[derive(Debug)]
-pub struct StdRuntime;
+pub struct StdRuntimeImpl;
 
-impl OneshotRuntime for StdRuntime
+impl OneshotRuntime for StdRuntimeImpl
 {
     fn spawn<F>(&self, task: F)
     where
@@ -82,19 +100,19 @@ impl OneshotRuntime for StdRuntime
     }
 }
 
-impl From<EmptyRuntime> for StdRuntime
+impl From<EmptyRuntime> for StdRuntimeImpl
 {
     fn from(_: EmptyRuntime) -> Self
     {
-        StdRuntime{}
+        StdRuntimeImpl{}
     }
 }
 
-impl From<EmptyRuntime> for &StdRuntime
+impl From<EmptyRuntime> for &StdRuntimeImpl
 {
     fn from(_: EmptyRuntime) -> Self
     {
-        &StdRuntime{}
+        &StdRuntimeImpl{}
     }
 }
 

@@ -9,7 +9,6 @@ use serde::{Serialize, Deserialize};
 //standard shortcuts
 use core::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -32,9 +31,6 @@ where
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
     client_closed_signal: DefaultIOPendingResult<()>,
-
-    /// cached runtime to ensure client remains operational
-    _runtime: Arc<DefaultIORuntime>,
 
     /// phantom
     _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
@@ -150,7 +146,7 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime                  : Arc<DefaultIORuntime>,
+        runtime                  : DefaultIORuntime,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
@@ -161,7 +157,7 @@ where
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
         DefaultIOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
-                &runtime.handle().into(),
+                &runtime.into(),
                 async move {
                     factory_clone.new_client_async(
                             runtime_clone,
@@ -177,7 +173,7 @@ where
     /// New client (async).
     /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_client_async(&self,
-        runtime                  : Arc<DefaultIORuntime>,
+        runtime                  : DefaultIORuntime,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
@@ -217,7 +213,7 @@ where
 
         // track client closure
         let client_closed_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.handle().into(),
+                &runtime.into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {
@@ -234,7 +230,6 @@ where
                 connection_report_receiver,
                 server_msg_receiver,
                 client_closed_signal,
-                _runtime: runtime,
                 _phantom: PhantomData::default(),
             }
     }

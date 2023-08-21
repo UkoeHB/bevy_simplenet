@@ -10,7 +10,6 @@ use core::fmt::Debug;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -35,9 +34,6 @@ where
     server_closed_signal: DefaultIOPendingResult<()>,
     /// signal indicates if server runner has stopped
     server_running_signal: DefaultIOPendingResult<()>,
-
-    /// cached runtime to ensure server remains operational
-    _runtime: Arc<DefaultIORuntime>,
 }
 
 impl<ServerMsg, ClientMsg, ConnectMsg> Server<ServerMsg, ClientMsg, ConnectMsg>
@@ -144,7 +140,7 @@ where
 
     /// Make a new server.
     pub fn new_server<A>(&self,
-        runtime             : Arc<DefaultIORuntime>,
+        runtime             : DefaultIORuntime,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
@@ -157,7 +153,7 @@ where
         let factory_clone = self.clone();
         let runtime_clone = runtime.clone();
         let PRResult::Result(server) = DefaultIOPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
-                &runtime.handle().into(),
+                &runtime.into(),
                 async move {
                     factory_clone.new_server_async(
                             runtime_clone,
@@ -174,7 +170,7 @@ where
     /// Make a new server (async).
     /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_server_async<A>(&self,
-        runtime             : Arc<DefaultIORuntime>,
+        runtime             : DefaultIORuntime,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
@@ -207,7 +203,7 @@ where
                     }
             );
         let server_closed_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.handle().into(),
+                &runtime.clone().into(),
                 async move {
                     if let Err(err) = server_worker.await
                     {
@@ -223,7 +219,7 @@ where
         // launch the server core
         let server_clone = server.clone();
         let server_running_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.handle().into(),
+                &runtime.into(),
                 async move {
                     if let Err(err) = ezsockets::tungstenite::run_on(
                             server_clone,
@@ -245,7 +241,6 @@ where
                 client_msg_receiver,
                 server_closed_signal,
                 server_running_signal,
-                _runtime: runtime
             }
     }
 }

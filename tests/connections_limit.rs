@@ -4,7 +4,6 @@
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
-use std::sync::Arc;
 use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -43,8 +42,8 @@ fn connections_limit_test(max_connections: u32)
     assert!(max_connections > 0);
 
     // prepare tokio runtimes for server and client
-    let server_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
-    let client_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
+    let server_runtime = bevy_simplenet::DefaultIORuntime::default();
+    let client_runtime = bevy_simplenet::DefaultIORuntime::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;

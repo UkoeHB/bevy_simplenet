@@ -13,8 +13,8 @@ use crate::*;
 mod envmod
 {
     use crate::*;
-    pub(super) type DefaultIOReceiver<R>  = SimpleResultReceiver<TokioRuntime<R>, R>;
-    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<StdRuntime, R>;
+    pub(super) type DefaultIOReceiver<R>  = SimpleResultReceiver<TokioRuntimeImpl<R>, R>;
+    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<StdRuntimeImpl, R>;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -24,8 +24,12 @@ mod envmod
 mod envmod
 {
     use crate::*;
-    pub(super) type DefaultIOReceiver<R>  = OneshotResultReceiver<WasmIORuntime, R>;
-    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<WasmIORuntime, R>;
+    pub(super) type DefaultIOReceiver<R>  = OneshotResultReceiver<WasmIORuntimeImpl, R>;
+    /// note: We use the WASM IO runtime here because implementing a CPU runtime on WASM currently can only be done
+    ///       with web workers, which are very inefficient and impose many restrictions on the interface (such as
+    ///       requiring everything to implement `Serialize/Deserialize`, and needing explicitly-defined channels since
+    ///       there is no shared memory).
+    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<WasmIORuntimeImpl, R>;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
