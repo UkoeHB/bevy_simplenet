@@ -1,4 +1,5 @@
 //local shortcuts
+use crate::*;
 
 //third-party shortcuts
 
@@ -15,24 +16,20 @@ pub struct TokioRuntime<R>
 
 impl<R: Send + 'static> SimpleRuntime<R> for TokioRuntime<R>
 {
-    type Future = tokio::runtime::JoinHandle<Self::Result>;
+    type Error = tokio::task::JoinError;
+    type Future = tokio::task::JoinHandle<R>;
 
-    fn spawn<T, F>(&self, task: T) -> Self::Future
+    fn spawn<F>(&self, task: F) -> Self::Future
     where
-        T: FnOnce() -> F,
-        T: Send + 'static,
-        F: std::future::Future<Output = Self::Result>,
+        F: std::future::Future<Output = R>,
         F: Send + 'static,
     {
         self.handle.spawn(task)
     }
-}
 
-impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntime<R>
-{
-    fn from(runtime: &tokio::runtime::Runtime) -> Self
+    fn is_terminated(f: &Self::Future) -> bool
     {
-        Self{ handle: runtime.handle().clone(), _phantom: std::marker::PhantomData<R>::default() }
+        f.is_finished()
     }
 }
 
@@ -44,20 +41,26 @@ impl<R: Send + 'static> From<tokio::runtime::Runtime> for TokioRuntime<R>
     }
 }
 
+impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntime<R>
+{
+    fn from(runtime: &tokio::runtime::Runtime) -> Self
+    {
+        TokioRuntime::<R>{ handle: runtime.handle().clone(), _phantom: std::marker::PhantomData::<R>::default() }
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------
 
 pub struct StdRuntime;
 
 impl OneshotRuntime for StdRuntime
 {
-    fn spawn<T, F>(&self, task: T)
+    fn spawn<F>(&self, task: F)
     where
-        T: FnOnce() -> F,
-        T: Send + 'static,
         F: std::future::Future<Output = ()>,
         F: Send + 'static,
     {
-        std::thread::spawn(task);
+        std::thread::spawn(move || futures::executor::block_on(async move { task.await }));
     }
 }
 
@@ -66,6 +69,14 @@ impl From<()> for StdRuntime
     fn from(_: ()) -> Self
     {
         StdRuntime{}
+    }
+}
+
+impl From<()> for &StdRuntime
+{
+    fn from(_: ()) -> Self
+    {
+        &StdRuntime{}
     }
 }
 

@@ -34,4 +34,11 @@ impl From<()> for WasmIORuntime
     }
 }
 
+impl From<()> for &WasmIORuntime
+{
+    fn from(_: ()) -> Self
+    {
+        WasmIORuntime{}
+    }
+}
 //-------------------------------------------------------------------------------------------------------------------

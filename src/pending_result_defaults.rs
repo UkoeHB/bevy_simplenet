@@ -1,4 +1,5 @@
 //local shortcuts
+use crate::*;
 
 //third-party shortcuts
 
@@ -11,8 +12,9 @@
 #[cfg(not(wasm))]
 mod envmod
 {
-    type DefaultIOReceiver<R>  = SimpleResultReceiver<TokioRuntime<R>, R>;
-    type DefaultCPUReceiver<R> = OneshotResultReceiver<StdRuntime, R>;
+    use crate::*;
+    pub(super) type DefaultIOReceiver<R>  = SimpleResultReceiver<TokioRuntime<R>, R>;
+    pub(super) type DefaultCPUReceiver<R> = OneshotResultReceiver<StdRuntime, R>;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -21,6 +23,7 @@ mod envmod
 #[cfg(wasm)]
 mod envmod
 {
+    use crate::*;
     type DefaultIOReceiver<R>  = OneshotResultReceiver<WasmIORuntime, R>;
     type DefaultCPUReceiver<R> = OneshotResultReceiver<WasmIORuntime, R>;
 }
@@ -28,7 +31,7 @@ mod envmod
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-pub type DefaultIOReceiver<R>  = envmod::DefaultIOReceiver<R>;
-pub type DefaultCPUReceiver<R> = envmod::DefaultCPUReceiver<R>;
+pub type DefaultIOPendingResult<R>  = PendingResult<envmod::DefaultIOReceiver<R>>;
+pub type DefaultCPUPendingResult<R> = PendingResult<envmod::DefaultCPUReceiver<R>>;
 
 //-------------------------------------------------------------------------------------------------------------------

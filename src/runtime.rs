@@ -7,35 +7,37 @@
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub trait OneshotRuntime
+pub trait OneshotRuntime: Send + 'static
 {
-    pub fn spawn<T, F>(&self, task: T)
+    fn spawn<F>(&self, task: F)
     where
-        T: FnOnce() -> F,
-        F: std::future::Future<Output = ()>;
+        F: std::future::Future<Output = ()>,
+        F: Send + 'static;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub trait SimpleRuntime<R>
+pub trait SimpleRuntime<R>: Send + 'static
 {
-    pub type Result = R;
-    pub type Future: std::future::Future<Output = Self::Result>;
+    type Error;
+    type Future: std::future::Future<Output = Result<R, Self::Error>> + Send + 'static;
 
-    pub fn spawn<T, F>(&self, task: T) -> Self::Future
+    fn spawn<F>(&self, task: F) -> Self::Future
     where
-        T: FnOnce() -> F,
-        F: std::future::Future<Output = Self::Result>;
+        F: std::future::Future<Output = R>,
+        F: Send + 'static;
+
+    fn is_terminated(f: &Self::Future) -> bool;
 }
 
 impl<SRt: SimpleRuntime::<()>> OneshotRuntime for SRt
 {
-    pub fn spawn<T, F>(&self, task: T)
+    fn spawn<F>(&self, task: F)
     where
-        T: FnOnce() -> F,
-        F: std::future::Future<Output = ()>
+        F: std::future::Future<Output = ()>,
+        F: Send + 'static
     {
-        self.<SRt as SimpleRuntime::<()>>::spawn(task);  //discard future (assume oneshots use a oneshot channel)
+        self.spawn(task);  //discard future (assume oneshots use a oneshot channel)
     }
 }
 

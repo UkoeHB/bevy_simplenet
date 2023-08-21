@@ -4,31 +4,31 @@ use crate::*;
 //third-party shortcuts
 
 //standard shortcuts
+use futures::future::FusedFuture;
 
 
 //-------------------------------------------------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-trait ResultReceiver
+pub trait ResultReceiver
 {
-    pub type Runtime;
-    pub type Result: Send + 'static;
+    type Runtime;
+    type Result: Send + 'static;
 
     /// Make a new result receiver.
-    pub fn new<T, F>(task: T, runtime: &Self::Runtime) -> Self
+    fn new<F>(runtime: &Self::Runtime, task: F) -> Self
     where
-        T: FnOnce() -> F + Send + 'static,
         F: std::future::Future<Output = Self::Result> + Send + 'static;
 
     /// Make a result receiver with an immediately-available result.
-    pub fn immediate(result: Self::Result, runtime: &Self::Runtime) -> Self;
+    fn immediate(runtime: &Self::Runtime, result: Self::Result) -> Self;
 
     /// Check if the result is ready.
-    pub fn done(&self) -> bool;
+    fn done(&self) -> bool;
 
     /// Get the result.
     /// Return `None` if the result could not be extracted (e.g. due to an error).
-    pub async fn get(mut self) -> Option<Result>;
+    async fn get(mut self) -> Option<Self::Result>;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -36,88 +36,89 @@ trait ResultReceiver
 pub struct OneshotResultReceiver<Rt, R>
 {
     oneshot: futures::channel::oneshot::Receiver<Option<R>>,
+    _phantom: std::marker::PhantomData<Rt>,
 }
 
+#[async_trait::async_trait]
 impl<Rt, R> ResultReceiver for OneshotResultReceiver<Rt, R>
 where
-    Rt: Into<OneshotRuntime>,
+    Rt: OneshotRuntime,
     R: Send + 'static
 {
     type Runtime = Rt;
     type Result = R;
 
-    pub fn new<T, F>(task: T, runtime: &Self::Runtime) -> Self
+    fn new<F>(runtime: &Self::Runtime, task: F) -> Self
     where
-        T: FnOnce() -> F + Send + 'static,
         F: std::future::Future<Output = Self::Result> + Send + 'static,
     {
         let (result_sender, result_receiver) = futures::channel::oneshot::channel();
         let work_task = async move {
-                let Ok(result) = task().await else { let _ = result_sender.send(None); return; };
+                let result = task.await; //else { let _ = result_sender.send(None); return; };
                 let _ = result_sender.send(Some(result));
             };
-        runtime.into::<OneshotRuntime>().spawn(work_task);
+        runtime.spawn(work_task);
 
-        Self{ oneshot: result_receiver }
+        Self{ oneshot: result_receiver, _phantom: std::marker::PhantomData::<Self::Runtime>::default() }
     }
 
-    pub fn immediate(result: Self::Result, _runtime: &Self::Runtime) -> Self
+    fn immediate(_runtime: &Self::Runtime, result: Self::Result) -> Self
     {
         let (result_sender, result_receiver) = futures::channel::oneshot::channel();
         let _ = result_sender.send(Some(result));
 
-        Self{ oneshot: result_receiver }
+        Self{ oneshot: result_receiver, _phantom: std::marker::PhantomData::<Self::Runtime>::default() }
     }
 
-    pub fn done(&self) -> bool
+    fn done(&self) -> bool
     {
         self.oneshot.is_terminated()
     }
 
-    pub async fn get(mut self) -> Option<Result>
+    async fn get(mut self) -> Option<Self::Result>
     {
-        self.oneshot.await
+        self.oneshot.await.unwrap_or(None)
     }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub struct SimpleResultReceiver<Rt: Into<SimpleRuntime<R>>, R>
+pub struct SimpleResultReceiver<Rt: SimpleRuntime<R>, R>
 {
-    handle: <Rt as SimpleRuntime<R>>::Future<R>,
+    handle: <Rt as SimpleRuntime<R>>::Future,
 }
 
+#[async_trait::async_trait]
 impl<Rt, R> ResultReceiver for SimpleResultReceiver<Rt, R>
 where
-    Rt: Into<SimpleRuntime<R>>,
+    Rt: SimpleRuntime<R>,
     R: Send + 'static,
 {
-    type Runtime: Rt;
-    type Result: R;
+    type Runtime = Rt;
+    type Result = R;
 
-    pub fn new<T, F>(task: T, runtime: &Self::Runtime) -> Self
+    fn new<F>(runtime: &Self::Runtime, task: F) -> Self
     where
-        T: FnOnce() -> F + Send + 'static,
         F: std::future::Future<Output = Self::Result> + Send + 'static,
     {
-        let handle = runtime.into::<SimpleRuntime<R>>().spawn(work_task);
+        let handle = runtime.spawn(task);
 
         Self{ handle }
     }
 
-    pub fn immediate(result: Self::Result, runtime: &Self::Runtime) -> Self
+    fn immediate(runtime: &Self::Runtime, result: Self::Result) -> Self
     {
-        let handle = runtime.into::<SimpleRuntime<R>>().spawn(futures::future::ready::(result));
+        let handle = runtime.spawn(futures::future::ready(result));
 
         Self{ handle }
     }
 
-    pub fn done(&self) -> bool
+    fn done(&self) -> bool
     {
-        self.handle.is_finished()
+        Self::Runtime::is_terminated(&self.handle)
     }
 
-    pub async fn get(mut self) -> Option<Result>
+    async fn get(mut self) -> Option<Self::Result>
     {
         let Ok(result) = self.handle.await else { return None; };
         Some(result)

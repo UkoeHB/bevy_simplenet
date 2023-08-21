@@ -1,4 +1,5 @@
 //local shortcuts
+use crate::*;
 
 //third-party shortcuts
 
@@ -27,22 +28,21 @@ pub struct PendingResult<Recv: ResultReceiver>
     result_receiver: Option<Recv>,
 }
 
-impl<Recv: ResultReceiver> PendingResult<Recv>
+impl<'a, Recv: ResultReceiver + 'a> PendingResult<Recv>
 {
     /// Make a new pending result.
-    pub fn new<T, F>(task: T, runtime: &Recv::Runtime) -> Self
+    pub fn new<F>(runtime: impl Into<&'a Recv::Runtime>, task: F) -> Self
     where
-        T: FnOnce() -> F + Send + 'static,
         F: std::future::Future<Output = Recv::Result> + Send + 'static,
     {
-        let result_receiver = Recv::new(task, runtime);
+        let result_receiver = Recv::new(runtime.into(), task);
         Self{ result_receiver: Some(result_receiver) }
     }
 
     /// Make a pending result that is immediately ready.
-    pub fn immediate(result: Recv::Result, runtime: &Recv::Runtime) -> Self
+    pub fn immediate(runtime: impl Into<&'a Recv::Runtime>, result: Recv::Result) -> Self
     {
-        let result_receiver = Recv::immediate(result, runtime);
+        let result_receiver = Recv::immediate(runtime.into(), result);
         Self{ result_receiver: Some(result_receiver) }
     }
 
@@ -80,7 +80,7 @@ impl<Recv: ResultReceiver> PendingResult<Recv>
     /// Extract result (blocking).
     pub fn extract(&mut self) -> PRResult<Recv::Result>
     {
-        futures::executor::block_on(async || self.extract_async().await)
+        futures::executor::block_on(async { self.extract_async().await })
     }
 
     /// Extract result (async).
