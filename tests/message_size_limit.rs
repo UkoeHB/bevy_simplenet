@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn message_size_limit_test(max_msg_size: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::DefaultIOHandle::default();
-    let client_runtime = enfync::DefaultIOHandle::default();
+    let server_runtime = enfync::defaults::IOHandle::default();
+    let client_runtime = enfync::defaults::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -75,7 +75,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client with invalid connect message size (block until connected)
     let large_connect_msg = DemoConnectMsg(large_msg.clone());
-    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 67891u128 },
@@ -96,7 +96,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from(""));
-    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 4678587u128 },

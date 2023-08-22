@@ -32,9 +32,9 @@ where
     client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
 
     /// signal indicates if server internal worker has stopped
-    server_closed_signal: enfync::DefaultIOPendingResult<()>,
+    server_closed_signal: enfync::defaults::IOPendingResult<()>,
     /// signal indicates if server runner has stopped
-    server_running_signal: enfync::DefaultIOPendingResult<()>,
+    server_running_signal: enfync::defaults::IOPendingResult<()>,
 }
 
 impl<ServerMsg, ClientMsg, ConnectMsg> Server<ServerMsg, ClientMsg, ConnectMsg>
@@ -141,7 +141,7 @@ where
 
     /// Make a new server.
     pub fn new_server<A>(&self,
-        runtime_handle      : enfync::DefaultIOHandle,
+        runtime_handle      : enfync::defaults::IOHandle,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
@@ -152,7 +152,7 @@ where
     {
         tracing::info!("new server pending");
         let factory_clone = self.clone();
-        let enfync::PRResult::Result(server) = enfync::DefaultIOPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        let enfync::Result::Ok(server) = enfync::defaults::IOPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
                 &runtime_handle.into(),
                 async move {
                     factory_clone.new_server_async(
@@ -187,7 +187,7 @@ where
             ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
 
         // make server core with our connection handler
-        let runtime_handle = enfync::DefaultIOHandle::adopt_or_default();
+        let runtime_handle = enfync::defaults::IOHandle::adopt_or_default();
         let (server, server_worker) = ezsockets::Server::create(
                 move |_server|
                 ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
@@ -200,7 +200,7 @@ where
                         _phantom: std::marker::PhantomData::default()
                     }
             );
-        let server_closed_signal = enfync::DefaultIOPendingResult::<()>::new(
+        let server_closed_signal = enfync::defaults::IOPendingResult::<()>::new(
                 &runtime_handle.clone().into(),
                 async move {
                     if let Err(err) = server_worker.await
@@ -216,7 +216,7 @@ where
 
         // launch the server core
         let server_clone = server.clone();
-        let server_running_signal = enfync::DefaultIOPendingResult::<()>::new(
+        let server_running_signal = enfync::defaults::IOPendingResult::<()>::new(
                 &runtime_handle.into(),
                 async move {
                     if let Err(err) = ezsockets::tungstenite::run_on(

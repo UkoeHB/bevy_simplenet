@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_request: bevy_simplenet::AuthRequest) -> bool
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::DefaultIOHandle::default();
-    let client_runtime = enfync::DefaultIOHandle::default();
+    let server_runtime = enfync::defaults::IOHandle::default();
+    let client_runtime = enfync::defaults::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -63,7 +63,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
         );
 
     // make client (block until connected)
-    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime,
             websocket_server.url(),
             auth_request,

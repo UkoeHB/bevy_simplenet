@@ -1,4 +1,4 @@
-# Bevy SimpleNet
+# Bevy SimpleNet {INITIAL RELEASE IS WIP}
 
 Provides a simple server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server`. It is not recommended to use this crate for game messages, but it may be useful for other networking requirements like authentication, talking to a matchmaking service, communicating between micro-services, etc.
 
@@ -62,7 +62,7 @@ tracing::info!("README test start");
 
 // make a server
 let server = server_factory().new_server(
-        enfync::DefaultIOHandle::default(),
+        enfync::defaults::IOHandle::default(),
         "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
@@ -79,8 +79,8 @@ let server = server_factory().new_server(
 
 // make a client
 let client_id = 0u128;
-let enfync::PRResult::Result(client) = client_factory().new_client(
-        enfync::DefaultIOHandle::default(),
+let enfync::Result::Ok(client) = client_factory().new_client(
+        enfync::defaults::IOHandle::default(),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConnectionConfig::default(),

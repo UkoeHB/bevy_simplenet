@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn rate_limit_test(max_count_per_period: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::DefaultIOHandle::default();
-    let client_runtime = enfync::DefaultIOHandle::default();
+    let server_runtime = enfync::defaults::IOHandle::default();
+    let client_runtime = enfync::defaults::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -67,7 +67,7 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from("hello!"));
-    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime,
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },
