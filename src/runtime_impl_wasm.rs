@@ -8,9 +8,9 @@
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Implements `OneshotRuntime` for `wasm` runtimes (spawn on local thread).
-/// If no other type implements `DefaultIORuntime`, this is the default IO runtime on WASM builds.
-/// If no other type implements `DefaultCPURuntime`, this is the default CPU runtime on WASM builds.
-#[derive(Debug)]
+/// If no other type implements `From<DefaultIOHandle>`, this is the default IO runtime on WASM builds.
+/// If no other type implements `From<DefaultCPUHandle>`, this is the default CPU runtime on WASM builds.
+#[derive(Debug, Clone, Default)]
 pub struct WasmIORuntime;
 
 impl OneshotRuntime for WasmIORuntime
@@ -30,26 +30,26 @@ impl OneshotRuntime for WasmIORuntime
     }
 }
 
-impl From<DefaultIORuntime> for WasmIORuntime {
-    fn from(_: DefaultIORuntime) -> Self {
+impl From<DefaultIOHandle> for WasmIORuntime {
+    fn from(_: DefaultIOHandle) -> Self {
         WasmIORuntime{}
     }
 }
 
-impl From<DefaultIORuntime> for &WasmIORuntime {
-    fn from(_: DefaultIORuntime) -> Self {
+impl From<DefaultIOHandle> for &WasmIORuntime {
+    fn from(_: DefaultIOHandle) -> Self {
         WasmIORuntime{}
     }
 }
 
-impl From<DefaultCPURuntime> for WasmIORuntime {
-    fn from(_: DefaultCPURuntime) -> Self {
+impl From<DefaultCPUHandle> for WasmIORuntime {
+    fn from(_: DefaultCPUHandle) -> Self {
         WasmIORuntime{}
     }
 }
 
-impl From<DefaultCPURuntime> for &WasmIORuntime {
-    fn from(_: DefaultCPURuntime) -> Self {
+impl From<DefaultCPUHandle> for &WasmIORuntime {
+    fn from(_: DefaultCPUHandle) -> Self {
         WasmIORuntime{}
     }
 }

@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_request: bevy_simplenet::AuthRequest) -> bool
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = bevy_simplenet::DefaultIORuntime::default();
-    let client_runtime = bevy_simplenet::DefaultIORuntime::default();
+    let server_runtime = bevy_simplenet::DefaultIOHandle::default();
+    let client_runtime = bevy_simplenet::DefaultIOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;

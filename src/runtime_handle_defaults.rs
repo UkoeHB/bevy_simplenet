@@ -11,7 +11,9 @@
 #[cfg(not(wasm))]
 mod envmod
 {
-    /// Default IO runtime (tokio).
+    use crate::*;
+
+    /// Default IO runtime handle (tokio).
     /// If you access this via `::default()`, you will get a handle to a statically-initialized tokio runtime.
     #[derive(Clone, Debug)]
     pub struct DefaultIOHandle(pub tokio::runtime::Handle);
@@ -28,6 +30,15 @@ mod envmod
                     }
                 );
             DefaultIOHandle(runtime.handle().clone())
+        }
+    }
+
+    impl TryAdopt for DefaultIOHandle
+    {
+        fn try_adopt() -> Option<DefaultIOHandle>
+        {
+            let Ok(handle) = tokio::runtime::Handle::try_current() else { return None; };
+            Some(DefaultIOHandle::from(handle))
         }
     }
 
@@ -55,9 +66,17 @@ mod envmod
         }
     }
 
-    /// Default CPU runtime (unspecified)
+    /// Default CPU runtime handle (unspecified)
     #[derive(Default)]
-    pub struct DefaultCPURuntime;
+    pub struct DefaultCPUHandle;
+
+    impl TryAdopt for DefaultCPUHandle
+    {
+        fn try_adopt() -> Option<DefaultCPUHandle>
+        {
+            Some(DefaultCPUHandle)
+        }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -68,19 +87,58 @@ mod envmod
 {
     use crate::*;
 
-    /// Default CPU runtime (unspecified)
+    /// Default IO runtime handle (unspecified)
     #[derive(Clone, Debug, Default)]
     pub struct DefaultIOHandle;
 
-    /// Default CPU runtime (unspecified)
+    impl TryAdopt for DefaultIOHandle
+    {
+        fn try_adopt() -> Option<DefaultIOHandle>
+        {
+            Some(DefaultIOHandle)
+        }
+    }
+
+    /// Default CPU runtime handle (unspecified)
     #[derive(Clone, Debug, Default)]
-    pub struct DefaultCPURuntime;
+    pub struct DefaultCPUHandle;
+
+    impl TryAdopt for DefaultCPUHandle
+    {
+        fn try_adopt() -> Option<DefaultCPUHandle>
+        {
+            Some(DefaultCPUHandle)
+        }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Try to adopt the existing runtime.
+/// Returns `None` if no runtime is detected.
+pub trait TryAdopt: Sized
+{
+    fn try_adopt() -> Option<Self>;
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Try to adopt the existing runtime, otherwise fall back to the default runtime.
+pub trait AdoptOrDefault: TryAdopt + Default
+{
+    fn adopt_or_default() -> Self
+    {
+        if let Some(adoptee) = Self::try_adopt() { return adoptee; }
+        Self::default()
+    }
+}
+
+impl<T: TryAdopt + Default> AdoptOrDefault for T {}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 pub type DefaultIOHandle  = envmod::DefaultIOHandle;
-pub type DefaultCPURuntime = envmod::DefaultCPURuntime;
+pub type DefaultCPUHandle = envmod::DefaultCPUHandle;
 
 //-------------------------------------------------------------------------------------------------------------------

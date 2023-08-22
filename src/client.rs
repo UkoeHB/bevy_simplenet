@@ -146,7 +146,7 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime                  : DefaultIORuntime,
+        runtime_handle           : DefaultIOHandle,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
@@ -155,12 +155,10 @@ where
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
-        let runtime_clone = runtime.clone();
         DefaultIOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
-                &runtime.into(),
+                &runtime_handle.into(),
                 async move {
                     factory_clone.new_client_async(
-                            runtime_clone,
                             url,
                             auth,
                             client_connection_config,
@@ -171,9 +169,7 @@ where
     }
 
     /// New client (async).
-    /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_client_async(&self,
-        runtime                  : DefaultIORuntime,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
@@ -213,7 +209,7 @@ where
 
         // track client closure
         let client_closed_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.into(),
+                &DefaultIOHandle::adopt_or_default().into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

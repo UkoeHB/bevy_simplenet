@@ -17,7 +17,7 @@ mod pending_result_defaults;
 mod rate_limiter;
 mod result_receiver;
 mod runtime;
-mod runtime_defaults;
+mod runtime_handle_defaults;
 mod server;
 mod session_handler;
 
@@ -39,7 +39,7 @@ pub use crate::pending_result_defaults::*;
 pub use crate::rate_limiter::*;
 pub use crate::result_receiver::*;
 pub use crate::runtime::*;
-pub use crate::runtime_defaults::*;
+pub use crate::runtime_handle_defaults::*;
 pub use crate::server::*;
 pub(crate) use crate::session_handler::*;
 

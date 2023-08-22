@@ -9,7 +9,7 @@ use std::fmt::Debug;
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Implements `SimpleRuntime` for `tokio` runtimes (spawn on tokio runtime).
-/// If no other type implements `DefaultIORuntime`, this is the default IO runtime on native builds.
+/// If no other type implements `From<DefaultIOHandle>`, this is the default IO runtime on native builds.
 #[derive(Debug)]
 pub struct TokioRuntimeImpl<R>
 {
@@ -44,7 +44,7 @@ impl<R: Send + 'static> From<tokio::runtime::Runtime> for TokioRuntimeImpl<R> {
 
 impl<R: Send + 'static> From<&tokio::runtime::Runtime> for TokioRuntimeImpl<R> {
     fn from(runtime: &tokio::runtime::Runtime) -> Self {
-        TokioRuntimeImpl::<R>{ handle: runtime.handle().clone(), _phantom: std::marker::PhantomData::<R>::default() }
+        Self::from(runtime.handle().clone())
     }
 }
 
@@ -60,14 +60,14 @@ impl<R: Send + 'static> From<&tokio::runtime::Handle> for TokioRuntimeImpl<R> {
     }
 }
 
-impl<R: Send + 'static> From<DefaultIORuntime> for TokioRuntimeImpl<R> {
-    fn from(handle: DefaultIORuntime) -> Self {
-        TokioRuntimeImpl::<R>::from(tokio::runtime::Handle::from(handle))
+impl<R: Send + 'static> From<DefaultIOHandle> for TokioRuntimeImpl<R> {
+    fn from(handle: DefaultIOHandle) -> Self {
+        Self::from(tokio::runtime::Handle::from(handle))
     }
 }
 
-impl<R: Send + 'static> From<&DefaultIORuntime> for TokioRuntimeImpl<R> {
-    fn from(handle: &DefaultIORuntime) -> Self {
+impl<R: Send + 'static> From<&DefaultIOHandle> for TokioRuntimeImpl<R> {
+    fn from(handle: &DefaultIOHandle) -> Self {
         Self::from(handle.clone())
     }
 }
@@ -75,8 +75,8 @@ impl<R: Send + 'static> From<&DefaultIORuntime> for TokioRuntimeImpl<R> {
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Implements `OneshotRuntime` for `std` runtimes (spawn new thread).
-/// If no other type implements `DefaultCPURuntime`, this is the default CPU runtime on native builds.
-#[derive(Debug)]
+/// If no other type implements `From<DefaultCPUHandle>`, this is the default CPU runtime on native builds.
+#[derive(Debug, Clone, Default)]
 pub struct StdRuntimeImpl;
 
 impl OneshotRuntime for StdRuntimeImpl
@@ -90,14 +90,14 @@ impl OneshotRuntime for StdRuntimeImpl
     }
 }
 
-impl From<DefaultCPURuntime> for StdRuntimeImpl {
-    fn from(_: DefaultCPURuntime) -> Self {
+impl From<DefaultCPUHandle> for StdRuntimeImpl {
+    fn from(_: DefaultCPUHandle) -> Self {
         StdRuntimeImpl{}
     }
 }
 
-impl From<DefaultCPURuntime> for &StdRuntimeImpl {
-    fn from(_: DefaultCPURuntime) -> Self {
+impl From<DefaultCPUHandle> for &StdRuntimeImpl {
+    fn from(_: DefaultCPUHandle) -> Self {
         &StdRuntimeImpl{}
     }
 }

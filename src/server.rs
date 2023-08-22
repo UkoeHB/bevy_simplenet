@@ -140,7 +140,7 @@ where
 
     /// Make a new server.
     pub fn new_server<A>(&self,
-        runtime             : DefaultIORuntime,
+        runtime_handle      : DefaultIOHandle,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
@@ -151,12 +151,10 @@ where
     {
         tracing::info!("new server pending");
         let factory_clone = self.clone();
-        let runtime_clone = runtime.clone();
         let PRResult::Result(server) = DefaultIOPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
-                &runtime.into(),
+                &runtime_handle.into(),
                 async move {
                     factory_clone.new_server_async(
-                            runtime_clone,
                             address,
                             connection_acceptor,
                             authenticator,
@@ -168,9 +166,7 @@ where
     }
 
     /// Make a new server (async).
-    /// - Must be invoked from within a persistent tokio runtime.
     pub async fn new_server_async<A>(&self,
-        runtime             : DefaultIORuntime,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
@@ -190,6 +186,7 @@ where
             ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
 
         // make server core with our connection handler
+        let runtime_handle = DefaultIOHandle::adopt_or_default();
         let (server, server_worker) = ezsockets::Server::create(
                 move |_server|
                 ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
@@ -203,7 +200,7 @@ where
                     }
             );
         let server_closed_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.clone().into(),
+                &runtime_handle.clone().into(),
                 async move {
                     if let Err(err) = server_worker.await
                     {
@@ -219,7 +216,7 @@ where
         // launch the server core
         let server_clone = server.clone();
         let server_running_signal = DefaultIOPendingResult::<()>::new(
-                &runtime.into(),
+                &runtime_handle.into(),
                 async move {
                     if let Err(err) = ezsockets::tungstenite::run_on(
                             server_clone,
