@@ -186,9 +186,9 @@ where
         let connect_msg_ser = serde_json::to_string(&connect_msg).expect("could not serialize connect msg");
 
         let client_config = ezsockets::ClientConfig::new(url)
-            .header(VERSION_MSG_HEADER, self.protocol_version)
-            .header(AUTH_MSG_HEADER, auth_msg_ser.as_str())
-            .header(CONNECT_MSG_HEADER, connect_msg_ser.as_str());
+            .query_parameter(VERSION_MSG_HEADER, self.protocol_version)
+            .query_parameter(AUTH_MSG_HEADER, auth_msg_ser.as_str())
+            .query_parameter(CONNECT_MSG_HEADER, connect_msg_ser.as_str());
 
         // prepare message channels that point out of our client
         let (

@@ -7,18 +7,19 @@ use serde::{Serialize, Deserialize};
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn check_protocol_version(
-    request          : &ezsockets::Request,
+fn check_protocol_version<'a>(
+    query_element    : Option<(Cow<str>, Cow<str>)>,
     protocol_version : &'static str
 ) -> Result<(), Option<ezsockets::CloseFrame>>
 {
-    // extract protocol version header
-    let Some(version_msg_val) = request.headers().get(VERSION_MSG_HEADER)
+    // get query element
+    let Some((key, value)) = query_element
     else
     {
         tracing::trace!("invalid version message (not present)");
@@ -28,20 +29,30 @@ fn check_protocol_version(
                 }));
     };
 
+    // check key
+    if key != VERSION_MSG_HEADER
+    {
+        tracing::trace!("invalid version message (not present)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Policy,
+                    reason : String::from("Version message missing.")
+                }));
+    }
+
     // sanity check the version msg size so we can safely log the version if there is a mismatch
-    if version_msg_val.as_bytes().len() > 20
+    if value.len() > 20
     {
         tracing::trace!("version too big");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Size,
-                    reason : String::from("Version oversided.")
+                    reason : String::from("Version oversized.")
                 }));
     }
 
     // check protocol version
-    if version_msg_val.as_bytes() != protocol_version.as_bytes()
+    if value != protocol_version
     {
-        tracing::trace!(?version_msg_val, protocol_version, "version mismatch");
+        tracing::trace!(?value, protocol_version, "version mismatch");
         return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Policy,
                     reason : String::from("Version mismatch.")
@@ -54,13 +65,13 @@ fn check_protocol_version(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn try_extract_client_id(
-    request       : &ezsockets::Request,
+fn try_extract_client_id<'a>(
+    query_element : Option<(Cow<str>, Cow<str>)>,
     authenticator : &Authenticator
 ) -> Result<u128, Option<ezsockets::CloseFrame>>
 {
     // extract auth msg
-    let Some(auth_msg_val) = request.headers().get(AUTH_MSG_HEADER)
+    let Some((key, value)) = query_element
     else
     {
         tracing::trace!("invalid auth message (not present)");
@@ -70,8 +81,18 @@ fn try_extract_client_id(
                 }));
     };
 
+    // check key
+    if key != AUTH_MSG_HEADER
+    {
+        tracing::trace!("invalid auth message (not present)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Policy,
+                    reason : String::from("Auth message missing.")
+                }));
+    }
+
     // deserialize
-    let Ok(auth_request) = serde_json::de::from_slice::<AuthRequest>(auth_msg_val.as_bytes())
+    let Ok(auth_request) = serde_json::de::from_str::<AuthRequest>(&value)
     else
     {
         tracing::trace!("invalid auth message (deserialization)");
@@ -97,15 +118,15 @@ fn try_extract_client_id(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn try_extract_connect_msg<ConnectMsg>(
-    request      : &ezsockets::Request,
-    max_msg_size : u32
+fn try_extract_connect_msg<'a, ConnectMsg>(
+    query_element : Option<(Cow<str>, Cow<str>)>,
+    max_msg_size  : u32
 ) -> Result<ConnectMsg, Option<ezsockets::CloseFrame>>
 where
     ConnectMsg: for<'de> Deserialize<'de> + 'static,
 {
     // extract connect msg
-    let Some(connect_msg_val) = request.headers().get(CONNECT_MSG_HEADER)
+    let Some((key, value)) = query_element
     else
     {
         tracing::trace!("invalid connect message (not present)");
@@ -115,11 +136,21 @@ where
                 }));
     };
 
+    // check key
+    if key != CONNECT_MSG_HEADER
+    {
+        tracing::trace!("invalid connect message (not present)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Policy,
+                    reason : String::from("Connect message missing.")
+                }));
+    }
+
     // validate size
     // note: since connect messages are serialized as json, the actual deserialized message will be smaller
     //       however, we still limit connect msg sizes to 'max msg size' since the goal is constraining byte throughput
     //       at the network layer
-    if connect_msg_val.as_bytes().len() > max_msg_size as usize
+    if value.len() > max_msg_size as usize
     {
         tracing::trace!("invalid connect message (too large)");
         return Err(Some(ezsockets::CloseFrame{
@@ -129,7 +160,7 @@ where
     }
 
     // deserialize
-    let Ok(connect_msg) = serde_json::de::from_slice::<ConnectMsg>(connect_msg_val.as_bytes())
+    let Ok(connect_msg) = serde_json::de::from_str::<ConnectMsg>(&value)
     else
     {
         tracing::trace!("invalid connect message (deserialization)");
@@ -191,8 +222,20 @@ where
         _address : std::net::SocketAddr,
     ) -> Result<ezsockets::Session<SessionID, ()>, Option<ezsockets::CloseFrame>>
     {
+        // parse request query
+        let Some(query) = request.uri().query()
+        else
+        {
+            tracing::trace!("invalid uri query, dropping connection request...");
+            return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Protocol,
+                    reason : String::from("Invalid query.")
+                }));
+        };
+        let mut query_elements_iterator = form_urlencoded::parse(query.as_bytes()).map(|(k, v)| (k, v));
+
         // reject connection if there is a protocol version mismatch
-        let _ = check_protocol_version(&request, self.protocol_version)?;
+        let _ = check_protocol_version(query_elements_iterator.next(), self.protocol_version)?;
 
         // reject connection if max connections reached
         if self.session_registry.len() >= self.config.max_connections as usize
@@ -205,7 +248,7 @@ where
         }
 
         // try to validate authentication
-        let id = try_extract_client_id(&request, &self.authenticator)?;
+        let id = try_extract_client_id(query_elements_iterator.next(), &self.authenticator)?;
 
         // reject connection if client id is already registered as a session
         if self.session_registry.contains_key(&id)
@@ -218,7 +261,7 @@ where
         }
 
         // try to extract connect message
-        let connect_msg = try_extract_connect_msg(&request, self.config.max_msg_size)?;
+        let connect_msg = try_extract_connect_msg(query_elements_iterator.next(), self.config.max_msg_size)?;
 
         // make a session
         let client_msg_sender = self.client_msg_sender.clone();

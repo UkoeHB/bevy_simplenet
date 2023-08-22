@@ -13,9 +13,9 @@ pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) const VERSION_MSG_HEADER: &'static str = "WSC-vers";
-pub(crate) const AUTH_MSG_HEADER: &'static str    = "WSC-auth";
-pub(crate) const CONNECT_MSG_HEADER: &'static str = "WSC-connect";
+pub(crate) const VERSION_MSG_HEADER: &'static str = "WSCv";
+pub(crate) const AUTH_MSG_HEADER: &'static str    = "WSCa";
+pub(crate) const CONNECT_MSG_HEADER: &'static str = "WSCc";
 
 //-------------------------------------------------------------------------------------------------------------------
 
