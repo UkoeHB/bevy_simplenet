@@ -4,6 +4,7 @@ use crate::*;
 //third-party shortcuts
 use bevy::prelude::Resource;
 use bincode::Options;
+use enfync::AdoptOrDefault;
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -30,7 +31,7 @@ where
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
-    client_closed_signal: DefaultIOPendingResult<()>,
+    client_closed_signal: enfync::DefaultIOPendingResult<()>,
 
     /// phantom
     _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
@@ -146,16 +147,16 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime_handle           : DefaultIOHandle,
+        runtime_handle           : enfync::DefaultIOHandle,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
         connect_msg              : ConnectMsg,
-    ) -> DefaultIOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
+    ) -> enfync::DefaultIOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
-        DefaultIOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        enfync::DefaultIOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
                 &runtime_handle.into(),
                 async move {
                     factory_clone.new_client_async(
@@ -208,8 +209,8 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = DefaultIOPendingResult::<()>::new(
-                &DefaultIOHandle::adopt_or_default().into(),
+        let client_closed_signal = enfync::DefaultIOPendingResult::<()>::new(
+                &enfync::DefaultIOHandle::adopt_or_default().into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

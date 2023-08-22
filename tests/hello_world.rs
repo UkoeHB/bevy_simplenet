@@ -50,8 +50,8 @@ fn bevy_simplenet_hello_world()
     */
 
     // prepare tokio runtimes for server and client
-    let server_runtime = bevy_simplenet::DefaultIOHandle::default();
-    let client_runtime = bevy_simplenet::DefaultIOHandle::default();
+    let server_runtime = enfync::DefaultIOHandle::default();
+    let client_runtime = enfync::DefaultIOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -80,7 +80,7 @@ fn bevy_simplenet_hello_world()
     // make client (block until connected)
     tracing::info!("ws hello world test: launching client...");
     let connect_msg1 = DemoConnectMsg(String::from("hello!"));
-    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
@@ -149,7 +149,7 @@ fn bevy_simplenet_hello_world()
     // new client (block until connected)
     tracing::info!("ws hello world test: launching client 2...");
     let connect_msg2 = DemoConnectMsg(String::from("hello 2!"));
-    let bevy_simplenet::PRResult::Result(websocket_client) = client_demo_factory().new_client(
+    let enfync::PRResult::Result(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 872657u128 },
