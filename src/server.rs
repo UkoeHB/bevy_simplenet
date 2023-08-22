@@ -152,7 +152,7 @@ where
     {
         tracing::info!("new server pending");
         let factory_clone = self.clone();
-        let enfync::Result::Ok(server) = enfync::defaults::IOPendingResult::<Server<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        let enfync::Result::Ok(server) = enfync::defaults::IOPendingResult::new(
                 &runtime_handle.into(),
                 async move {
                     factory_clone.new_server_async(
@@ -176,6 +176,9 @@ where
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
     {
+        #[cfg(wasm)]
+        { panic!("bevy simplenet servers not supported on WASM!"); }
+
         // prepare message channels that point out of connection handler
         let (
                 connection_report_sender,
@@ -200,7 +203,7 @@ where
                         _phantom: std::marker::PhantomData::default()
                     }
             );
-        let server_closed_signal = enfync::defaults::IOPendingResult::<()>::new(
+        let server_closed_signal = enfync::defaults::IOPendingResult::new(
                 &runtime_handle.clone().into(),
                 async move {
                     if let Err(err) = server_worker.await
@@ -216,7 +219,7 @@ where
 
         // launch the server core
         let server_clone = server.clone();
-        let server_running_signal = enfync::defaults::IOPendingResult::<()>::new(
+        let server_running_signal = enfync::defaults::IOPendingResult::new(
                 &runtime_handle.into(),
                 async move {
                     if let Err(err) = ezsockets::tungstenite::run_on(

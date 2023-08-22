@@ -156,7 +156,7 @@ where
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
-        enfync::defaults::IOPendingResult::<Client<ServerMsg, ClientMsg, ConnectMsg>>::new(
+        enfync::defaults::IOPendingResult::new(
                 &runtime_handle.into(),
                 async move {
                     factory_clone.new_client_async(
@@ -177,6 +177,9 @@ where
         connect_msg              : ConnectMsg,
     ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
     {
+        #[cfg(wasm)]
+        { panic!("bevy simplenet clients not supported (yet) on WASM!"); }
+
         // prepare to make client connection
         // note: http headers cannot contain raw bytes so we must serialize as json
         let auth_msg_ser    = serde_json::to_string(&auth).expect("could not serialize authentication");
@@ -209,7 +212,7 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = enfync::defaults::IOPendingResult::<()>::new(
+        let client_closed_signal = enfync::defaults::IOPendingResult::new(
                 &enfync::defaults::IOHandle::adopt_or_default().into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
