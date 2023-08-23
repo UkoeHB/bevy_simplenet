@@ -1,3 +1,6 @@
+//disable warnings
+#![allow(irrefutable_let_patterns)]
+
 //local shortcuts
 use crate::*;
 
@@ -23,6 +26,8 @@ where
 {
     /// the server's address
     server_address: SocketAddr,
+    /// whether or not the server uses TLS
+    uses_tls: bool,
 
     /// sends messages to the internal connection handler
     server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
@@ -102,7 +107,7 @@ where
     /// get the server's url
     pub fn url(&self) -> url::Url
     {
-        make_websocket_url(self.server_address).unwrap()
+        make_websocket_url(self.uses_tls, self.server_address).unwrap()
     }
 
     /// Test if the server is dead.
@@ -216,6 +221,8 @@ where
         // prepare listener
         let connection_listener = tokio::net::TcpListener::bind(address).await.unwrap();
         let server_address = connection_listener.local_addr().unwrap();
+        let mut uses_tls = false;
+        if let ezsockets::tungstenite::Acceptor::Plain = connection_acceptor {} else { uses_tls = true; }
 
         // launch the server core
         let server_clone = server.clone();
@@ -237,6 +244,7 @@ where
         tracing::info!("new server created");
         Server{
                 server_address,
+                uses_tls,
                 server_msg_sender: server.into(),  //extract the call sender
                 connection_report_receiver,
                 client_msg_receiver,
