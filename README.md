@@ -62,7 +62,7 @@ tracing::info!("README test start");
 
 // make a server
 let server = server_factory().new_server(
-        enfync::defaults::IOHandle::default(),
+        enfync::builtin::IOHandle::default(),
         "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
@@ -79,8 +79,8 @@ let server = server_factory().new_server(
 
 // make a client
 let client_id = 0u128;
-let enfync::Result::Ok(client) = client_factory().new_client(
-        enfync::defaults::IOHandle::default(),
+let Ok(client) = client_factory().new_client(
+        enfync::builtin::IOHandle::default(),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConnectionConfig::default(),

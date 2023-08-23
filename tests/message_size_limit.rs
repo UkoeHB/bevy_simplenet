@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn message_size_limit_test(max_msg_size: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::defaults::IOHandle::default();
-    let client_runtime = enfync::defaults::IOHandle::default();
+    let server_runtime = enfync::builtin::IOHandle::default();
+    let client_runtime = enfync::builtin::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -75,7 +75,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client with invalid connect message size (block until connected)
     let large_connect_msg = DemoConnectMsg(large_msg.clone());
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 67891u128 },
@@ -86,17 +86,17 @@ fn message_size_limit_test(max_msg_size: u32)
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
     assert!(websocket_client.is_dead());  //failed to connect
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
-    else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) = websocket_client.try_get_next_connection_report()
-    else { panic!("client should be closed by server"); };
+    let Some(bevy_simplenet::ClientConnectionReport::Connected) =
+        websocket_client.try_get_next_connection_report() else { panic!("client should be connected to server"); };
+    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) =
+        websocket_client.try_get_next_connection_report() else { panic!("client should be closed by server"); };
 
 
     // 3. client message size limit
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from(""));
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 4678587u128 },

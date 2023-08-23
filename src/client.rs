@@ -31,7 +31,7 @@ where
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
-    client_closed_signal: enfync::defaults::IOPendingResult<()>,
+    client_closed_signal: enfync::builtin::IOPendingResult<()>,
 
     /// phantom
     _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
@@ -147,16 +147,16 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime_handle           : enfync::defaults::IOHandle,
+        runtime_handle           : enfync::builtin::IOHandle,
         url                      : url::Url,
         auth                     : AuthRequest,
         client_connection_config : ClientConnectionConfig,
         connect_msg              : ConnectMsg,
-    ) -> enfync::defaults::IOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
+    ) -> enfync::builtin::IOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
-        enfync::defaults::IOPendingResult::new(
+        enfync::builtin::IOPendingResult::new(
                 &runtime_handle.into(),
                 async move {
                     factory_clone.new_client_async(
@@ -212,8 +212,8 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = enfync::defaults::IOPendingResult::new(
-                &enfync::defaults::IOHandle::adopt_or_default().into(),
+        let client_closed_signal = enfync::builtin::IOPendingResult::new(
+                &enfync::builtin::IOHandle::adopt_or_default().into(),
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

@@ -40,8 +40,8 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn rate_limit_test(max_count_per_period: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::defaults::IOHandle::default();
-    let client_runtime = enfync::defaults::IOHandle::default();
+    let server_runtime = enfync::builtin::IOHandle::default();
+    let client_runtime = enfync::builtin::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -67,7 +67,7 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from("hello!"));
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime,
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },
@@ -151,10 +151,10 @@ fn rate_limit_test(max_count_per_period: u32)
     // expect client was disconnected
     assert!(websocket_client.is_dead());
 
-    let Some(bevy_simplenet::ServerConnectionReport::Disconnected(dc_client_id)) = websocket_server.try_get_next_connection_report()
-    else { panic!("client should be disconnected"); };
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) = websocket_client.try_get_next_connection_report()
-    else { panic!("client should be closed by server"); };
+    let Some(bevy_simplenet::ServerConnectionReport::Disconnected(dc_client_id)) =
+        websocket_server.try_get_next_connection_report() else { panic!("client should be disconnected"); };
+    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) =
+        websocket_client.try_get_next_connection_report() else { panic!("client should be closed by server"); };
     assert_eq!(client_id, dc_client_id);
 
 

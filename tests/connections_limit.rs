@@ -42,8 +42,8 @@ fn connections_limit_test(max_connections: u32)
     assert!(max_connections > 0);
 
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::defaults::IOHandle::default();
-    let client_runtime = enfync::defaults::IOHandle::default();
+    let server_runtime = enfync::builtin::IOHandle::default();
+    let client_runtime = enfync::builtin::IOHandle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
@@ -74,7 +74,7 @@ fn connections_limit_test(max_connections: u32)
     for client_num in 0..max_connections
     {
         // make client (block until connected)
-        let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+        let Ok(websocket_client) = client_demo_factory().new_client(
                 client_runtime.clone(),
                 websocket_url.clone(),
                 bevy_simplenet::AuthRequest::None{ client_id: client_num as u128 },
@@ -96,7 +96,7 @@ fn connections_limit_test(max_connections: u32)
 
     // 2. connecting one more client should fail
     // make client (block until connected)
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 92748u128 },
@@ -128,7 +128,7 @@ fn connections_limit_test(max_connections: u32)
 
     // 4. adding a client should now succeed
     // make client (block until connected)
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 64819u128 },
@@ -149,7 +149,7 @@ fn connections_limit_test(max_connections: u32)
 
     // 5. connecting one more client should fail
     // make client (block until connected)
-    let enfync::Result::Ok(websocket_client) = client_demo_factory().new_client(
+    let Ok(websocket_client) = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 15364898u128 },
