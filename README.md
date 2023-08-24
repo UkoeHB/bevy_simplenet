@@ -79,13 +79,13 @@ let server = server_factory().new_server(
 
 // make a client
 let client_id = 0u128;
-let Ok(client) = client_factory().new_client(
+let client = client_factory().new_client(
         enfync::builtin::IOHandle::default(),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConfig::default(),
         ConnectMsg(String::from("hello"))
-    ).extract() else { panic!("failed connecting to server"); };
+    );
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 

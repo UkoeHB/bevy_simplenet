@@ -80,13 +80,13 @@ fn bevy_simplenet_hello_world()
     // make client (block until connected)
     tracing::info!("ws hello world test: launching client...");
     let connect_msg1 = DemoConnectMsg(String::from("hello!"));
-    let Ok(websocket_client) = client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg1.clone()
-        ).extract() else { panic!(""); };
+        );
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -148,13 +148,13 @@ fn bevy_simplenet_hello_world()
     // new client (block until connected)
     tracing::info!("ws hello world test: launching client 2...");
     let connect_msg2 = DemoConnectMsg(String::from("hello 2!"));
-    let Ok(websocket_client) = client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 872657u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg2.clone()
-        ).extract() else { panic!(""); };
+        );
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

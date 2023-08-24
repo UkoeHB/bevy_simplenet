@@ -75,13 +75,13 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client with invalid connect message size (block until connected)
     let large_connect_msg = DemoConnectMsg(large_msg.clone());
-    let Ok(websocket_client) = client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 67891u128 },
             bevy_simplenet::ClientConfig::default(),
             large_connect_msg
-        ).extract() else { panic!(""); };
+        );
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -96,13 +96,13 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client (block until connected)
     let connect_msg = DemoConnectMsg(String::from(""));
-    let Ok(websocket_client) = client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 4678587u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
-        ).extract() else { panic!(""); };
+        );
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

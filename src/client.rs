@@ -145,14 +145,14 @@ where
         ClientFactory{ protocol_version, _phantom: PhantomData::default() }
     }
 
-    /// New client (result is available once client is connected).
+    /// New client.
     pub fn new_client(&self,
         runtime_handle : enfync::builtin::IOHandle,
         url            : url::Url,
         auth           : AuthRequest,
         config         : ClientConfig,
         connect_msg    : ConnectMsg,
-    ) -> enfync::builtin::IOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
+    ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
@@ -166,7 +166,7 @@ where
                             connect_msg,
                         ).await
                 }
-            )
+            ).extract().expect("client construction failed")
     }
 
     /// New client (async).
