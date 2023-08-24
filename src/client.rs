@@ -47,6 +47,9 @@ where
     pub type Factory = ClientFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
     /// Send message to server.
+    /// Messages will be buffered while the client is connecting/reconnecting.
+    /// Returns `Err` if the client is dead (calls to `Client::is_dead()` may return true for a short time
+    /// after this returns `Err`). Messages will silently fail if buffered and not sent due to the client dying.
     pub fn send(&self, msg: &ClientMsg) -> Result<(), ()>
     {
         if self.is_dead()

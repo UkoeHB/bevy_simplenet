@@ -52,6 +52,8 @@ where
     pub type Factory = ServerFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
     /// Send a message to the target session.
+    /// Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    /// Returns `Err` if an internal server error occurs.
     pub fn send(&self, id: SessionID, msg: ServerMsg) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
