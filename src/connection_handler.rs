@@ -30,7 +30,7 @@ fn check_protocol_version<'a>(
     };
 
     // check key
-    if key != VERSION_MSG_HEADER
+    if key != VERSION_MSG_KEY
     {
         tracing::trace!("invalid version message (not present)");
         return Err(Some(ezsockets::CloseFrame{
@@ -65,6 +65,48 @@ fn check_protocol_version<'a>(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+fn try_extract_client_env<'a>(
+    query_element : Option<(Cow<str>, Cow<str>)>,
+) -> Result<EnvType, Option<ezsockets::CloseFrame>>
+{
+    // extract env type
+    let Some((key, value)) = query_element
+    else
+    {
+        tracing::trace!("invalid env type (not present)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Policy,
+                    reason : String::from("Env type missing.")
+                }));
+    };
+
+    // check key
+    if key != TYPE_MSG_KEY
+    {
+        tracing::trace!("invalid env type (not present)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Policy,
+                    reason : String::from("Env type missing.")
+                }));
+    }
+
+    // get value
+    let Some(env_type) = env_type_from_str(&value)
+    else
+    {
+        tracing::trace!("invalid env type (unknown)");
+        return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Invalid,
+                    reason : String::from("Unknown env type.")
+                }));
+    };
+
+    Ok(env_type)
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 fn try_extract_client_id<'a>(
     query_element : Option<(Cow<str>, Cow<str>)>,
     authenticator : &Authenticator
@@ -82,7 +124,7 @@ fn try_extract_client_id<'a>(
     };
 
     // check key
-    if key != AUTH_MSG_HEADER
+    if key != AUTH_MSG_KEY
     {
         tracing::trace!("invalid auth message (not present)");
         return Err(Some(ezsockets::CloseFrame{
@@ -137,7 +179,7 @@ where
     };
 
     // check key
-    if key != CONNECT_MSG_HEADER
+    if key != CONNECT_MSG_KEY
     {
         tracing::trace!("invalid connect message (not present)");
         return Err(Some(ezsockets::CloseFrame{
@@ -222,6 +264,16 @@ where
         _address : std::net::SocketAddr,
     ) -> Result<ezsockets::Session<SessionID, ()>, Option<ezsockets::CloseFrame>>
     {
+        // reject connection if max connections reached
+        if self.session_registry.len() >= self.config.max_connections as usize
+        {
+            tracing::trace!("max connections reached, dropping connection request...");
+            return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Protocol,
+                    reason : String::from("Max connections reached.")
+                }));
+        }
+
         // parse request query
         let Some(query) = request.uri().query()
         else
@@ -237,15 +289,8 @@ where
         // reject connection if there is a protocol version mismatch
         let _ = check_protocol_version(query_elements_iterator.next(), self.protocol_version)?;
 
-        // reject connection if max connections reached
-        if self.session_registry.len() >= self.config.max_connections as usize
-        {
-            tracing::trace!("max connections reached, dropping connection request...");
-            return Err(Some(ezsockets::CloseFrame{
-                    code   : ezsockets::CloseCode::Protocol,
-                    reason : String::from("Max connections reached.")
-                }));
-        }
+        // get client's impelementation type
+        let _client_env_type = try_extract_client_env(query_elements_iterator.next())?;
 
         // try to validate authentication
         let id = try_extract_client_id(query_elements_iterator.next(), &self.authenticator)?;
@@ -262,6 +307,9 @@ where
 
         // try to extract connect message
         let connect_msg = try_extract_connect_msg(query_elements_iterator.next(), self.config.max_msg_size)?;
+
+        // define Ping/Pong strategy based on client env type
+        //todo: _client_env_type
 
         // make a session
         let client_msg_sender = self.client_msg_sender.clone();

@@ -13,9 +13,10 @@ pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) const VERSION_MSG_HEADER: &'static str = "WSCv";
-pub(crate) const AUTH_MSG_HEADER: &'static str    = "WSCa";
-pub(crate) const CONNECT_MSG_HEADER: &'static str = "WSCc";
+pub(crate) const VERSION_MSG_KEY: &'static str = "v";
+pub(crate) const TYPE_MSG_KEY: &'static str    = "t";
+pub(crate) const AUTH_MSG_KEY: &'static str    = "a";
+pub(crate) const CONNECT_MSG_KEY: &'static str = "c";
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -73,6 +74,43 @@ impl Default for ClientConfig
                 reconnect_on_disconnect   : true,
                 reconnect_on_server_close : false,
             }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EnvType
+{
+    Native,
+    Wasm,
+}
+
+pub(crate) fn env_type() -> EnvType
+{
+    #[cfg(not(wasm))]
+    { EnvType::Native }
+
+    #[cfg(wasm)]
+    { EnvType::Wasm }
+}
+
+pub(crate) fn env_type_as_str(env_type: EnvType) -> &'static str
+{
+    match env_type
+    {
+        EnvType::Native => "0",
+        EnvType::Wasm   => "1",
+    }
+}
+
+pub(crate) fn env_type_from_str(env_type: &str) -> Option<EnvType>
+{
+    match env_type
+    {
+        "0" => Some(EnvType::Native),
+        "1" => Some(EnvType::Wasm),
+        _   => None
     }
 }
 
