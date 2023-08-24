@@ -77,7 +77,7 @@ fn bevy_simplenet_hello_world()
 
 
 
-    // make client (block until connected)
+    // make client
     tracing::info!("ws hello world test: launching client...");
     let connect_msg1 = DemoConnectMsg(String::from("hello!"));
     let websocket_client = client_demo_factory().new_client(
@@ -145,7 +145,7 @@ fn bevy_simplenet_hello_world()
 
 
 
-    // new client (block until connected)
+    // new client
     tracing::info!("ws hello world test: launching client 2...");
     let connect_msg2 = DemoConnectMsg(String::from("hello 2!"));
     let websocket_client = client_demo_factory().new_client(

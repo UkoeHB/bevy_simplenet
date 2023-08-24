@@ -10,6 +10,7 @@ use serde::{Serialize, Deserialize};
 //standard shortcuts
 use core::fmt::Debug;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 

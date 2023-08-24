@@ -73,7 +73,7 @@ fn connections_limit_test(max_connections: u32)
 
     for client_num in 0..max_connections
     {
-        // make client (block until connected)
+        // make client
         let websocket_client = client_demo_factory().new_client(
                 client_runtime.clone(),
                 websocket_url.clone(),
@@ -95,7 +95,7 @@ fn connections_limit_test(max_connections: u32)
     }
 
     // 2. connecting one more client should fail
-    // make client (block until connected)
+    // make client
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
@@ -127,7 +127,7 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("server should see a disconnected client"); };
 
     // 4. adding a client should now succeed
-    // make client (block until connected)
+    // make client
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
@@ -148,7 +148,7 @@ fn connections_limit_test(max_connections: u32)
     clients.push(websocket_client);  //save client so it doesn't get dropped
 
     // 5. connecting one more client should fail
-    // make client (block until connected)
+    // make client
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),

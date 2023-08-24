@@ -73,7 +73,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // 2. connect message size limit
 
-    // make client with invalid connect message size (block until connected)
+    // make client with invalid connect message size
     let large_connect_msg = DemoConnectMsg(large_msg.clone());
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
@@ -94,7 +94,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // 3. client message size limit
 
-    // make client (block until connected)
+    // make client
     let connect_msg = DemoConnectMsg(String::from(""));
     let websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),

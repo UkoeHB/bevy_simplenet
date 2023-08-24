@@ -65,7 +65,7 @@ fn rate_limit_test(max_count_per_period: u32)
     let websocket_url = websocket_server.url();
 
 
-    // make client (block until connected)
+    // make client
     let connect_msg = DemoConnectMsg(String::from("hello!"));
     let websocket_client = client_demo_factory().new_client(
             client_runtime,

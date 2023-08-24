@@ -284,7 +284,7 @@ where
                     reason : String::from("Invalid query.")
                 }));
         };
-        let mut query_elements_iterator = form_urlencoded::parse(query.as_bytes()).map(|(k, v)| (k, v));
+        let mut query_elements_iterator = form_urlencoded::parse(query.as_bytes());
 
         // reject connection if there is a protocol version mismatch
         let _ = check_protocol_version(query_elements_iterator.next(), self.protocol_version)?;
