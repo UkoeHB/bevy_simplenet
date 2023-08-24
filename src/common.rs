@@ -21,7 +21,7 @@ pub(crate) const CONNECT_MSG_HEADER: &'static str = "WSCc";
 
 /// Emitted by servers when a client connects/disconnects.
 #[derive(Debug, Clone)]
-pub enum ServerConnectionReport<ConnectMsg: Debug + Clone>
+pub enum ServerReport<ConnectMsg: Debug + Clone>
 {
     Connected(SessionID, ConnectMsg),
     Disconnected(SessionID)
@@ -31,7 +31,7 @@ pub enum ServerConnectionReport<ConnectMsg: Debug + Clone>
 
 /// Server-enforced constraints on client connections.
 #[derive(Debug)]
-pub struct ServerConnectionConfig
+pub struct ServerConfig
 {
     /// Max number of concurrent client connections.
     pub max_connections: u32,
@@ -45,7 +45,7 @@ pub struct ServerConnectionConfig
 
 /// Emitted by clients when they connect/disconnect.
 #[derive(Debug, Clone)]
-pub enum ClientConnectionReport
+pub enum ClientReport
 {
     Connected,
     Disconnected,
@@ -57,7 +57,7 @@ pub enum ClientConnectionReport
 
 /// Config controlling how clients respond to connection events
 #[derive(Debug)]
-pub struct ClientConnectionConfig
+pub struct ClientConfig
 {
     /// Try to reconnect if the client is disconnected (`true` by default).
     pub reconnect_on_disconnect: bool,
@@ -65,11 +65,11 @@ pub struct ClientConnectionConfig
     pub reconnect_on_server_close: bool,
 }
 
-impl Default for ClientConnectionConfig
+impl Default for ClientConfig
 {
-    fn default() -> ClientConnectionConfig
+    fn default() -> ClientConfig
     {
-        ClientConnectionConfig{
+        ClientConfig{
                 reconnect_on_disconnect   : true,
                 reconnect_on_server_close : false,
             }

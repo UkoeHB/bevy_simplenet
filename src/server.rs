@@ -32,7 +32,7 @@ where
     /// sends messages to the internal connection handler
     server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
     /// receives reports from the internal connection handler
-    connection_report_receiver: crossbeam::channel::Receiver<ServerConnectionReport<ConnectMsg>>,
+    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<ConnectMsg>>,
     /// receives client messages from the internal connection handler
     client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
 
@@ -52,7 +52,7 @@ where
     pub type Factory = ServerFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
     /// Send a message to the target session.
-    pub fn send_msg(&self, id: SessionID, msg: ServerMsg) -> Result<(), ()>
+    pub fn send(&self, id: SessionID, msg: ServerMsg) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if self.is_dead()
@@ -90,7 +90,7 @@ where
     }
 
     /// Try to get the next available connection report.
-    pub fn try_get_next_connection_report(&self) -> Option<ServerConnectionReport<ConnectMsg>>
+    pub fn next_report(&self) -> Option<ServerReport<ConnectMsg>>
     {
         //todo: count connections
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
@@ -98,7 +98,7 @@ where
     }
 
     /// Try to extract the next available message from a client.
-    pub fn try_get_next_msg(&self) -> Option<(SessionID, ClientMsg)>
+    pub fn next_msg(&self) -> Option<(SessionID, ClientMsg)>
     {
         let Ok(msg) = self.client_msg_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
@@ -150,7 +150,7 @@ where
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
-        config              : ServerConnectionConfig,
+        config              : ServerConfig,
     ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
@@ -176,7 +176,7 @@ where
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
-        config              : ServerConnectionConfig
+        config              : ServerConfig
     ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
@@ -188,7 +188,7 @@ where
         let (
                 connection_report_sender,
                 connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ServerConnectionReport<ConnectMsg>>();
+            ) = crossbeam::channel::unbounded::<ServerReport<ConnectMsg>>();
         let (
                 client_msg_sender,
                 client_msg_receiver

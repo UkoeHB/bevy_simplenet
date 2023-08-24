@@ -8,7 +8,7 @@ Provides a simple server/client channel implemented over websockets that can be 
 
 ## Usage notes
 
-- Uses `tokio` runtimes to create servers/clients. The backend is the `ezsockets` crate on top of `tokio-tungstenite`.
+- Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets` on top of `tokio-tungstenite` (TODO: WASM client backend).
 - Session ids equal client ids, which are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
 - A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
 - Connect messages will be reused for all reconnect attempts by clients, so they should be treated as static data.
@@ -66,7 +66,7 @@ let server = server_factory().new_server(
         "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
-        bevy_simplenet::ServerConnectionConfig{
+        bevy_simplenet::ServerConfig{
             max_connections   : 10,
             max_msg_size      : 10_000,
             rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -83,40 +83,38 @@ let Ok(client) = client_factory().new_client(
         enfync::builtin::IOHandle::default(),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
-        bevy_simplenet::ClientConnectionConfig::default(),
+        bevy_simplenet::ClientConfig::default(),
         ConnectMsg(String::from("hello"))
     ).extract() else { panic!("failed connecting to server"); };
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 
 // read connection messages
-let bevy_simplenet::ServerConnectionReport::Connected(client_id, connect_msg) =
-    server.try_get_next_connection_report().unwrap()
-else { panic!("client not connected to server"); };
-let bevy_simplenet::ClientConnectionReport::Connected =
-    client.try_get_next_connection_report().unwrap()
-else { panic!("client not connected to server"); };
+let bevy_simplenet::ServerReport::Connected(client_id, connect_msg) =
+    server.next_report().unwrap() else { panic!("client not connected to server"); };
+let bevy_simplenet::ClientReport::Connected =
+    client.next_report().unwrap() else { panic!("client not connected to server"); };
 assert_eq!(connect_msg.0, String::from("hello"));
 
 
 // send message: client -> server
-client.send_msg(&ClientMsg(42)).unwrap();
+client.send(&ClientMsg(42)).unwrap();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 
 // read message from client
-let (msg_client_id, ClientMsg(msg_client_val)) = server.try_get_next_msg().unwrap();
+let (msg_client_id, ClientMsg(msg_client_val)) = server.next_msg().unwrap();
 assert_eq!(msg_client_id, client_id);
 assert_eq!(msg_client_val, 42);
 
 
 // send message: server -> client
-server.send_msg(client_id, ServerMsg(24)).unwrap();
+server.send(client_id, ServerMsg(24)).unwrap();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 
 // read message from server
-let ServerMsg(msg_server_val) = client.try_get_next_msg().unwrap();
+let ServerMsg(msg_server_val) = client.next_msg().unwrap();
 assert_eq!(msg_server_val, 24);
 
 
@@ -126,19 +124,11 @@ std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async mach
 
 
 // read disconnection messages
-let bevy_simplenet::ClientConnectionReport::ClosedBySelf =
-    client.try_get_next_connection_report().unwrap()
-else { panic!("client not closed by self"); };
-let bevy_simplenet::ServerConnectionReport::Disconnected(client_id) =
-    server.try_get_next_connection_report().unwrap()
+let bevy_simplenet::ServerReport::Disconnected(client_id) = server.next_report().unwrap()
 else { panic!("client not disconnected"); };
+let bevy_simplenet::ClientReport::ClosedBySelf = client.next_report().unwrap()
+else { panic!("client not closed by self"); };
 ```
-
-
-
-## Bonus
-
-- Provides `TokioPendingResult<R>()` and `StdPendingResult<R>()` utilities for handling thread outputs.
 
 
 
@@ -151,12 +141,6 @@ else { panic!("client not disconnected"); };
 - The server should count connections to better support authentication workflows that use an external service to issue auth tokens only if the server is not over-subscribed. Auth tokens should include an expiration time so disconnected clients can be forced to reconnect via the auth service.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
 - Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs) or [this crate](https://docs.rs/ws_stream_wasm/latest/ws_stream_wasm/)).
-
-
-
-## Comments
-
-- This crate does not use `rustfmt`.
 
 
 

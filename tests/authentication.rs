@@ -52,7 +52,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             "127.0.0.1:0",
             plain_acceptor,
             authenticator,
-            bevy_simplenet::ServerConnectionConfig{
+            bevy_simplenet::ServerConfig{
                 max_connections   : 10,
                 max_msg_size      : 10_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -67,7 +67,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             client_runtime,
             websocket_server.url(),
             auth_request,
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             DemoConnectMsg(String::from("hello"))
         ).extract() else { panic!(""); };
 

@@ -63,7 +63,7 @@ fn bevy_simplenet_hello_world()
             "127.0.0.1:0",
             plain_acceptor,
             bevy_simplenet::Authenticator::None,
-            bevy_simplenet::ServerConnectionConfig{
+            bevy_simplenet::ServerConfig{
                 max_connections   : 10,
                 max_msg_size      : 1_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -84,17 +84,16 @@ fn bevy_simplenet_hello_world()
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             connect_msg1.clone()
         ).extract() else { panic!(""); };
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerConnectionReport::Connected(client_id, connect_msg)) =
-        websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Connected(client_id, connect_msg)) = websocket_server.next_report()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg1.0);
 
@@ -102,11 +101,11 @@ fn bevy_simplenet_hello_world()
     // send message: client -> server
     tracing::info!("ws hello world test: client sending msg...");
     let client_val = 42;
-    websocket_client.send_msg(&DemoClientMsg(client_val)).unwrap();
+    websocket_client.send(&DemoClientMsg(client_val)).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some((msg_client_id, DemoClientMsg(msg_client_val))) = websocket_server.try_get_next_msg()
+    let Some((msg_client_id, DemoClientMsg(msg_client_val))) = websocket_server.next_msg()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_val, msg_client_val);
@@ -115,11 +114,11 @@ fn bevy_simplenet_hello_world()
     // send message: server -> client
     tracing::info!("ws hello world test: server sending msg...");
     let server_val = 24;
-    websocket_server.send_msg(client_id, DemoServerMsg(server_val)).unwrap();
+    websocket_server.send(client_id, DemoServerMsg(server_val)).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(DemoServerMsg(msg_server_val)) = websocket_client.try_get_next_msg()
+    let Some(DemoServerMsg(msg_server_val)) = websocket_client.next_msg()
     else { panic!("client did not receive server msg"); };
     assert_eq!(server_val, msg_server_val);
 
@@ -138,9 +137,9 @@ fn bevy_simplenet_hello_world()
     assert!(!websocket_server.is_dead());
     assert!(websocket_client.is_dead());
 
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
-    let Some(bevy_simplenet::ServerConnectionReport::Disconnected(dc_client_id)) = websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()
     else { panic!("server should be disconnected after client is disconnected (by server)"); };
     assert_eq!(client_id, dc_client_id);
 
@@ -153,17 +152,16 @@ fn bevy_simplenet_hello_world()
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 872657u128 },
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             connect_msg2.clone()
         ).extract() else { panic!(""); };
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerConnectionReport::Connected(client_id, connect_msg)) =
-        websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Connected(client_id, connect_msg)) = websocket_server.next_report()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg2.0);
 
@@ -177,17 +175,17 @@ fn bevy_simplenet_hello_world()
     assert!(!websocket_server.is_dead());
     assert!(websocket_client.is_dead());
 
-    let Some(bevy_simplenet::ServerConnectionReport::Disconnected(dc_client_id)) = websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()
     else { panic!("server should be disconnected after client is disconnected (by client)"); };
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedBySelf) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::ClosedBySelf) = websocket_client.next_report()
     else { panic!("client should have closed itself"); };
     assert_eq!(client_id, dc_client_id);
 
 
     // no more connection reports
-    let None = websocket_server.try_get_next_connection_report()
+    let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.try_get_next_connection_report()
+    let None = websocket_client.next_report()
     else { panic!("client should receive no more connection reports"); };
 }
 

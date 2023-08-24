@@ -54,7 +54,7 @@ fn connections_limit_test(max_connections: u32)
             "127.0.0.1:0",
             plain_acceptor,
             bevy_simplenet::Authenticator::None,
-            bevy_simplenet::ServerConnectionConfig{
+            bevy_simplenet::ServerConfig{
                 max_connections,
                 max_msg_size: 10_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
@@ -78,7 +78,7 @@ fn connections_limit_test(max_connections: u32)
                 client_runtime.clone(),
                 websocket_url.clone(),
                 bevy_simplenet::AuthRequest::None{ client_id: client_num as u128 },
-                bevy_simplenet::ClientConnectionConfig::default(),
+                bevy_simplenet::ClientConfig::default(),
                 connect_msg.clone()
             ).extract() else { panic!(""); };
 
@@ -86,9 +86,9 @@ fn connections_limit_test(max_connections: u32)
 
         // client should connect
         assert!(!websocket_client.is_dead());
-        let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+        let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
         else { panic!("client should be connected to server"); };
-        let Some(bevy_simplenet::ServerConnectionReport::Connected(_, _)) = websocket_server.try_get_next_connection_report()
+        let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
         else { panic!("server should be connected to client: {}", client_num); };
 
         clients.push(websocket_client);
@@ -100,7 +100,7 @@ fn connections_limit_test(max_connections: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 92748u128 },
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
         ).extract() else { panic!(""); };
 
@@ -108,11 +108,11 @@ fn connections_limit_test(max_connections: u32)
 
     // client should get closed by the server immediately
     assert!(websocket_client.is_dead());
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
-    let None = websocket_server.try_get_next_connection_report()
+    let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
 
     // 3. disconnect one client
@@ -121,9 +121,9 @@ fn connections_limit_test(max_connections: u32)
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedBySelf) = client_to_disconnect.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::ClosedBySelf) = client_to_disconnect.next_report()
     else { panic!("client should be closed by self"); };
-    let Some(bevy_simplenet::ServerConnectionReport::Disconnected(_)) = websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Disconnected(_)) = websocket_server.next_report()
     else { panic!("server should see a disconnected client"); };
 
     // 4. adding a client should now succeed
@@ -132,7 +132,7 @@ fn connections_limit_test(max_connections: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 64819u128 },
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
         ).extract() else { panic!(""); };
 
@@ -140,9 +140,9 @@ fn connections_limit_test(max_connections: u32)
 
     // client should connect
     assert!(!websocket_client.is_dead());
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ServerConnectionReport::Connected(_, _)) = websocket_server.try_get_next_connection_report()
+    let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
     else { panic!("server should be connected to client"); };
 
     clients.push(websocket_client);  //save client so it doesn't get dropped
@@ -153,7 +153,7 @@ fn connections_limit_test(max_connections: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 15364898u128 },
-            bevy_simplenet::ClientConnectionConfig::default(),
+            bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
         ).extract() else { panic!(""); };
 
@@ -161,18 +161,18 @@ fn connections_limit_test(max_connections: u32)
 
     // client should not connect
     assert!(websocket_client.is_dead());
-    let Some(bevy_simplenet::ClientConnectionReport::Connected) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ClientConnectionReport::ClosedByServer(_)) = websocket_client.try_get_next_connection_report()
+    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
-    let None = websocket_server.try_get_next_connection_report()
+    let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
 
 
     // no more connection reports
-    let None = websocket_server.try_get_next_connection_report()
+    let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.try_get_next_connection_report()
+    let None = websocket_client.next_report()
     else { panic!("client should receive no more connection reports"); };
 }
 

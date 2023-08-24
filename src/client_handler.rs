@@ -15,9 +15,9 @@ use std::vec::Vec;
 pub(crate) struct ClientHandler<ServerMsg>
 {
     /// config
-    pub(crate) config: ClientConnectionConfig,
+    pub(crate) config: ClientConfig,
     /// collects connection events
-    pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientConnectionReport>,
+    pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// collects messages from the server
     pub(crate) server_msg_sender: crossbeam::channel::Sender<ServerMsg>,
 }
@@ -74,7 +74,7 @@ where
     async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
         // forward event to client owner
-        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::Connected)
+        if let Err(err) = self.connection_report_sender.send(ClientReport::Connected)
         {
             tracing::error!(?err, "failed to forward connection event to client");
             return Err(Box::new(ClientError::SendError));  //client is broken
@@ -88,7 +88,7 @@ where
         tracing::info!("disconnected");
 
         // forward event to client owner
-        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::Disconnected)
+        if let Err(err) = self.connection_report_sender.send(ClientReport::Disconnected)
         {
             tracing::error!(?err, "failed to forward connection event to client");
             return Err(Box::new(ClientError::SendError));  //client is broken
@@ -111,7 +111,7 @@ where
         tracing::info!(?close_frame, "closed by server");
 
         // forward event to client owner
-        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::ClosedByServer(close_frame))
+        if let Err(err) = self.connection_report_sender.send(ClientReport::ClosedByServer(close_frame))
         {
             tracing::error!(?err, "failed to forward connection event to client");
             return Err(Box::new(ClientError::SendError));  //client is broken

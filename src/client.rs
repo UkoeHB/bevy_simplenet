@@ -25,9 +25,9 @@ where
     /// core websockets client
     client: ezsockets::Client<ClientHandler<ServerMsg>>,
     /// sender for connection events (used for 'closed by self')
-    connection_report_sender: crossbeam::channel::Sender<ClientConnectionReport>,
+    connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// receiver for connection events
-    connection_report_receiver: crossbeam::channel::Receiver<ClientConnectionReport>,
+    connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
@@ -47,7 +47,7 @@ where
     pub type Factory = ClientFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
     /// Send message to server.
-    pub fn send_msg(&self, msg: &ClientMsg) -> Result<(), ()>
+    pub fn send(&self, msg: &ClientMsg) -> Result<(), ()>
     {
         if self.is_dead()
         {
@@ -66,14 +66,14 @@ where
     }
 
     /// Try to get next message received from server.
-    pub fn try_get_next_msg(&self) -> Option<ServerMsg>
+    pub fn next_msg(&self) -> Option<ServerMsg>
     {
         let Ok(msg) = self.server_msg_receiver.try_recv() else { return None; };
         Some(msg)
     }
 
     /// Try to get next client connection report.
-    pub fn try_get_next_connection_report(&self) -> Option<ClientConnectionReport>
+    pub fn next_report(&self) -> Option<ClientReport>
     {
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
         Some(msg)
@@ -111,7 +111,7 @@ where
         }
 
         // forward event to other end of channel
-        if let Err(err) = self.connection_report_sender.send(ClientConnectionReport::ClosedBySelf)
+        if let Err(err) = self.connection_report_sender.send(ClientReport::ClosedBySelf)
         {
             tracing::error!(?err, "failed to forward connection event to client");
         }
@@ -147,11 +147,11 @@ where
 
     /// New client (result is available once client is connected).
     pub fn new_client(&self,
-        runtime_handle           : enfync::builtin::IOHandle,
-        url                      : url::Url,
-        auth                     : AuthRequest,
-        client_connection_config : ClientConnectionConfig,
-        connect_msg              : ConnectMsg,
+        runtime_handle : enfync::builtin::IOHandle,
+        url            : url::Url,
+        auth           : AuthRequest,
+        config         : ClientConfig,
+        connect_msg    : ConnectMsg,
     ) -> enfync::builtin::IOPendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
@@ -162,7 +162,7 @@ where
                     factory_clone.new_client_async(
                             url,
                             auth,
-                            client_connection_config,
+                            config,
                             connect_msg,
                         ).await
                 }
@@ -171,10 +171,10 @@ where
 
     /// New client (async).
     pub async fn new_client_async(&self,
-        url                      : url::Url,
-        auth                     : AuthRequest,
-        client_connection_config : ClientConnectionConfig,
-        connect_msg              : ConnectMsg,
+        url           : url::Url,
+        auth          : AuthRequest,
+        config        : ClientConfig,
+        connect_msg   : ConnectMsg,
     ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
     {
         #[cfg(wasm)]
@@ -194,7 +194,7 @@ where
         let (
                 connection_report_sender,
                 connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ClientConnectionReport>();
+            ) = crossbeam::channel::unbounded::<ClientReport>();
         let (server_msg_sender, server_msg_receiver) = crossbeam::channel::unbounded::<ServerMsg>();
 
         // make client core with our handler
@@ -203,8 +203,8 @@ where
                 move |_client|
                 {
                     ClientHandler::<ServerMsg>{
-                            config                   : client_connection_config,
-                            connection_report_sender : connection_report_sender_clone,
+                            config,
+                            connection_report_sender: connection_report_sender_clone,
                             server_msg_sender
                         }
                 },

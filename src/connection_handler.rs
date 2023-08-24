@@ -188,11 +188,11 @@ where
     /// protocol version
     pub(crate) protocol_version: &'static str,
     /// config: maximum message size (bytes)
-    pub(crate) config: ServerConnectionConfig,
+    pub(crate) config: ServerConfig,
 
     /// sender endpoint for reporting connection events
     /// - receiver is in server owner
-    pub(crate) connection_report_sender: crossbeam::channel::Sender<ServerConnectionReport<ConnectMsg>>,
+    pub(crate) connection_report_sender: crossbeam::channel::Sender<ServerReport<ConnectMsg>>,
     /// registered sessions
     pub(crate) session_registry: HashMap<SessionID, ezsockets::Session<SessionID, ()>>,
 
@@ -287,7 +287,7 @@ where
         self.session_registry.insert(id, session.clone());
 
         // report the new connection
-        if let Err(err) = self.connection_report_sender.send(ServerConnectionReport::<ConnectMsg>::Connected(id, connect_msg))
+        if let Err(err) = self.connection_report_sender.send(ServerReport::<ConnectMsg>::Connected(id, connect_msg))
         {
             tracing::error!(?err, "forwarding connection report failed");
             return Err(Some(ezsockets::CloseFrame{
@@ -311,7 +311,7 @@ where
         self.session_registry.remove(&id);
 
         // send connection report
-        if let Err(err) = self.connection_report_sender.send(ServerConnectionReport::<ConnectMsg>::Disconnected(id))
+        if let Err(err) = self.connection_report_sender.send(ServerReport::<ConnectMsg>::Disconnected(id))
         {
             tracing::error!(?err, "forwarding disconnect report failed");
             return Err(Box::new(ConnectionError::SystemError));
