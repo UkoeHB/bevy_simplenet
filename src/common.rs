@@ -6,6 +6,7 @@ use crate::*;
 //standard shortcuts
 use core::fmt::Debug;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -64,6 +65,8 @@ pub struct ClientConfig
     pub reconnect_on_disconnect: bool,
     /// Try to reconnect if the client is closed by the server (`false` by default).
     pub reconnect_on_server_close: bool,
+    /// Reconnect interval (delay between reconnect attempts)
+    pub reconnect_interval: Duration,
 }
 
 impl Default for ClientConfig
@@ -73,6 +76,7 @@ impl Default for ClientConfig
         ClientConfig{
                 reconnect_on_disconnect   : true,
                 reconnect_on_server_close : false,
+                reconnect_interval        : Duration::from_secs(2)
             }
     }
 }

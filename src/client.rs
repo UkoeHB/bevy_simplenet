@@ -10,7 +10,6 @@ use serde::{Serialize, Deserialize};
 //standard shortcuts
 use core::fmt::Debug;
 use std::marker::PhantomData;
-use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -190,7 +189,7 @@ where
         let connect_msg_ser = serde_json::to_string(&connect_msg).expect("could not serialize connect msg");
 
         let client_config = ezsockets::ClientConfig::new(url)
-            .reconnect_interval(Duration::from_secs(0))  //todo: ezsockets should try to reconnect immediately
+            .reconnect_interval(config.reconnect_interval)
             .query_parameter(VERSION_MSG_KEY, self.protocol_version)
             .query_parameter(TYPE_MSG_KEY, env_type_as_str(env_type()))
             .query_parameter(AUTH_MSG_KEY, auth_msg_ser.as_str())
