@@ -4,7 +4,7 @@ use crate::*;
 //third-party shortcuts
 use bevy::prelude::Resource;
 use bincode::Options;
-use enfync::AdoptOrDefault;
+use enfync::{AdoptOrDefault, Handle};
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -31,7 +31,7 @@ where
     /// receiver for messages sent by the server
     server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
     /// signal for when the internal client is shut down
-    client_closed_signal: enfync::builtin::IOPendingResult<()>,
+    client_closed_signal: enfync::PendingResult<()>,
 
     /// phantom
     _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
@@ -159,8 +159,7 @@ where
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
-        enfync::builtin::IOPendingResult::new(
-                &runtime_handle.into(),
+        runtime_handle.spawn(
                 async move {
                     factory_clone.new_client_async(
                             url,
@@ -217,8 +216,7 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = enfync::builtin::IOPendingResult::new(
-                &enfync::builtin::IOHandle::adopt_or_default().into(),
+        let client_closed_signal = enfync::builtin::IOHandle::adopt_or_default().spawn(
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

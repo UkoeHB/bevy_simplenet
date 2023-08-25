@@ -6,7 +6,7 @@ use crate::*;
 
 //third-party shortcuts
 use bevy::prelude::Resource;
-use enfync::AdoptOrDefault;
+use enfync::{AdoptOrDefault, Handle};
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -37,9 +37,9 @@ where
     client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
 
     /// signal indicates if server internal worker has stopped
-    server_closed_signal: enfync::builtin::IOPendingResult<()>,
+    server_closed_signal: enfync::PendingResult<()>,
     /// signal indicates if server runner has stopped
-    server_running_signal: enfync::builtin::IOPendingResult<()>,
+    server_running_signal: enfync::PendingResult<()>,
 }
 
 impl<ServerMsg, ClientMsg, ConnectMsg> Server<ServerMsg, ClientMsg, ConnectMsg>
@@ -159,8 +159,7 @@ where
     {
         tracing::info!("new server pending");
         let factory_clone = self.clone();
-        let Ok(server) = enfync::builtin::IOPendingResult::new(
-                &runtime_handle.into(),
+        let Ok(server) = runtime_handle.spawn(
                 async move {
                     factory_clone.new_server_async(
                             address,
@@ -210,8 +209,7 @@ where
                         _phantom: std::marker::PhantomData::default()
                     }
             );
-        let server_closed_signal = enfync::builtin::IOPendingResult::new(
-                &runtime_handle.clone().into(),
+        let server_closed_signal = runtime_handle.spawn(
                 async move {
                     if let Err(err) = server_worker.await
                     {
@@ -228,8 +226,7 @@ where
 
         // launch the server core
         let server_clone = server.clone();
-        let server_running_signal = enfync::builtin::IOPendingResult::new(
-                &runtime_handle.into(),
+        let server_running_signal = runtime_handle.spawn(
                 async move {
                     if let Err(err) = ezsockets::tungstenite::run_on(
                             server_clone,
