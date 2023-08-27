@@ -4,7 +4,7 @@ use crate::*;
 //third-party shortcuts
 use bevy::prelude::Resource;
 use bincode::Options;
-use enfync::{AdoptOrDefault, Handle};
+use enfync::{AdoptOrDefault, HandleTrait};
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -91,7 +91,7 @@ where
     /// Test if client is dead (no longer connected to server and won't reconnect).
     pub fn is_dead(&self) -> bool
     {
-        self.client_closed_signal.is_done()
+        self.client_closed_signal.done()
     }
 
     /// Close the client.
@@ -150,12 +150,12 @@ where
 
     /// New client.
     pub fn new_client(&self,
-        runtime_handle : enfync::builtin::IOHandle,
+        runtime_handle : enfync::builtin::Handle,
         url            : url::Url,
         auth           : AuthRequest,
         config         : ClientConfig,
         connect_msg    : ConnectMsg,
-    ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
+    ) -> enfync::PendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
     {
         tracing::info!("new client pending");
         let factory_clone = self.clone();
@@ -168,7 +168,7 @@ where
                             connect_msg,
                         ).await
                 }
-            ).extract().expect("client construction failed")
+            )
     }
 
     /// New client (async).
@@ -216,7 +216,7 @@ where
             ).await;
 
         // track client closure
-        let client_closed_signal = enfync::builtin::IOHandle::adopt_or_default().spawn(
+        let client_closed_signal = enfync::builtin::Handle::adopt_or_default().spawn(
                 async move {
                     if let Err(err) = client_handler_worker.await
                     {

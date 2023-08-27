@@ -6,7 +6,7 @@ use crate::*;
 
 //third-party shortcuts
 use bevy::prelude::Resource;
-use enfync::{AdoptOrDefault, Handle};
+use enfync::{AdoptOrDefault, HandleTrait};
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -115,7 +115,7 @@ where
     /// Test if the server is dead.
     pub fn is_dead(&self) -> bool
     {
-        self.server_closed_signal.is_done() || self.server_running_signal.is_done()
+        self.server_closed_signal.done() || self.server_running_signal.done()
     }
 }
 
@@ -148,18 +148,18 @@ where
 
     /// Make a new server.
     pub fn new_server<A>(&self,
-        runtime_handle      : enfync::builtin::IOHandle,
+        runtime_handle      : enfync::builtin::Handle,
         address             : A,
         connection_acceptor : ezsockets::tungstenite::Acceptor,
         authenticator       : Authenticator,
         config              : ServerConfig,
-    ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
+    ) -> enfync::PendingResult<Server<ServerMsg, ClientMsg, ConnectMsg>>
     where
         A: tokio::net::ToSocketAddrs + Send + 'static
     {
         tracing::info!("new server pending");
         let factory_clone = self.clone();
-        let Ok(server) = runtime_handle.spawn(
+        runtime_handle.spawn(
                 async move {
                     factory_clone.new_server_async(
                             address,
@@ -168,8 +168,7 @@ where
                             config
                         ).await
                 }
-            ).extract() else { panic!("failed to launch server!"); };
-        server
+            )
     }
 
     /// Make a new server (async).
@@ -196,7 +195,7 @@ where
             ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
 
         // make server core with our connection handler
-        let runtime_handle = enfync::builtin::IOHandle::adopt_or_default();
+        let runtime_handle = enfync::builtin::Handle::adopt_or_default();
         let (server, server_worker) = ezsockets::Server::create(
                 move |_server|
                 ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{

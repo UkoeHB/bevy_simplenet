@@ -50,15 +50,15 @@ fn bevy_simplenet_hello_world()
     */
 
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::builtin::IOHandle::default();
-    let client_runtime = enfync::builtin::IOHandle::default();
+    let server_runtime = enfync::builtin::Handle::default();
+    let client_runtime = enfync::builtin::Handle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
     // launch websocket server
     tracing::info!("ws hello world test: launching server...");
-    let websocket_server = server_demo_factory().new_server(
+    let websocket_server = enfync::blocking::extract(server_demo_factory().new_server(
             server_runtime,
             "127.0.0.1:0",
             plain_acceptor,
@@ -71,7 +71,7 @@ fn bevy_simplenet_hello_world()
                         max_count : 20
                     }
             }
-        );
+        )).unwrap();
 
     let websocket_url = websocket_server.url();
 
@@ -80,13 +80,13 @@ fn bevy_simplenet_hello_world()
     // make client
     tracing::info!("ws hello world test: launching client...");
     let connect_msg1 = DemoConnectMsg(String::from("hello!"));
-    let websocket_client = client_demo_factory().new_client(
+    let websocket_client = enfync::blocking::extract(client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg1.clone()
-        );
+        )).unwrap();
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -148,13 +148,13 @@ fn bevy_simplenet_hello_world()
     // new client
     tracing::info!("ws hello world test: launching client 2...");
     let connect_msg2 = DemoConnectMsg(String::from("hello 2!"));
-    let websocket_client = client_demo_factory().new_client(
+    let websocket_client = enfync::blocking::extract(client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 872657u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg2.clone()
-        );
+        )).unwrap();
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

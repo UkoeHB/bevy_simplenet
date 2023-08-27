@@ -61,8 +61,8 @@ tracing::info!("README test start");
 
 
 // make a server
-let server = server_factory().new_server(
-        enfync::builtin::IOHandle::default(),
+let server = enfync::blocking::extract(server_factory().new_server(
+        enfync::builtin::Handle::default(),
         "127.0.0.1:0",
         ezsockets::tungstenite::Acceptor::Plain,
         bevy_simplenet::Authenticator::None,
@@ -74,18 +74,18 @@ let server = server_factory().new_server(
                     max_count : 25
                 }
         }
-    );
+    )).unwrap();
 
 
 // make a client
 let client_id = 0u128;
-let client = client_factory().new_client(
-        enfync::builtin::IOHandle::default(),
+let client = enfync::blocking::extract(client_factory().new_client(
+        enfync::builtin::Handle::default(),
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConfig::default(),
         ConnectMsg(String::from("hello"))
-    );
+    )).unwrap();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
 
 

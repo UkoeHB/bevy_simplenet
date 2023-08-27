@@ -40,14 +40,14 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn rate_limit_test(max_count_per_period: u32)
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::builtin::IOHandle::default();
-    let client_runtime = enfync::builtin::IOHandle::default();
+    let server_runtime = enfync::builtin::Handle::default();
+    let client_runtime = enfync::builtin::Handle::default();
 
     // prepare connection acceptor
     let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
 
     // launch websocket server
-    let websocket_server = server_demo_factory().new_server(
+    let websocket_server = enfync::blocking::extract(server_demo_factory().new_server(
             server_runtime,
             "127.0.0.1:0",
             plain_acceptor,
@@ -60,20 +60,20 @@ fn rate_limit_test(max_count_per_period: u32)
                         max_count : max_count_per_period
                     }
             }
-        );
+        )).unwrap();
 
     let websocket_url = websocket_server.url();
 
 
     // make client
     let connect_msg = DemoConnectMsg(String::from("hello!"));
-    let websocket_client = client_demo_factory().new_client(
+    let websocket_client = enfync::blocking::extract(client_demo_factory().new_client(
             client_runtime,
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
-        );
+        )).unwrap();
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
