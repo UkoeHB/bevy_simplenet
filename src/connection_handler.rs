@@ -66,7 +66,7 @@ fn check_protocol_version<'a>(
 //-------------------------------------------------------------------------------------------------------------------
 
 fn try_extract_client_env<'a>(
-    query_element : Option<(Cow<str>, Cow<str>)>,
+    query_element: Option<(Cow<str>, Cow<str>)>,
 ) -> Result<EnvType, Option<ezsockets::CloseFrame>>
 {
     // extract env type

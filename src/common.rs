@@ -92,10 +92,10 @@ pub(crate) enum EnvType
 
 pub(crate) fn env_type() -> EnvType
 {
-    #[cfg(not(wasm))]
+    #[cfg(not(target_family = "wasm"))]
     { EnvType::Native }
 
-    #[cfg(wasm)]
+    #[cfg(target_family = "wasm")]
     { EnvType::Wasm }
 }
 

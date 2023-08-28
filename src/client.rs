@@ -149,6 +149,7 @@ where
     }
 
     /// New client.
+    //todo: return client directly instead of pending result (need non-async ezsockets connect)
     pub fn new_client(&self,
         runtime_handle : enfync::builtin::Handle,
         url            : url::Url,
