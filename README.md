@@ -148,5 +148,4 @@ else { panic!("client not closed by self"); };
 
 | bevy   | bevy_simplenet |
 |--------|----------------|
-| 0.11.0 | todo           |
-| 0.10.1 | 0.1            |
+| 0.11.0 | master         |
