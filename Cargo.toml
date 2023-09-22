@@ -9,6 +9,15 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/UkoeHB/bevy_simplenet"
 
+[lib]
+path = "src/lib.rs"
+test = false
+
+[[test]]
+name = "tests"
+path = "tests/test/mod.rs"
+doctest = false
+
 [dependencies]
 async-trait     = { version = "0.1.71" }
 bevy            = { version = "0.11", default-features = false }
