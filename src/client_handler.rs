@@ -126,4 +126,17 @@ where
     }
 }
 
+impl<ServerMsg> Drop for ClientHandler<ServerMsg>
+{
+    fn drop(&mut self)
+    {
+        // forward event to client owner
+        if let Err(err) = self.connection_report_sender.send(ClientReport::IsDead)
+        {
+            // failing may not be a mistake if the owning client was dropped
+            tracing::debug!(?err, "failed to forward 'client is dead' report to client");
+        }
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------

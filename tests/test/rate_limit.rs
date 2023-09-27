@@ -154,6 +154,8 @@ fn rate_limit_test(max_count_per_period: u32)
     else { panic!("client should be disconnected"); };
     let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
+    let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
+    else { panic!("client should be closed by server"); };
     assert_eq!(client_id, dc_client_id);
 
 

@@ -165,6 +165,8 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("client should be connected to server"); };
     let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
+    let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
+    else { panic!("client should be closed by server"); };
     let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
 

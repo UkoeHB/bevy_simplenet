@@ -179,6 +179,8 @@ fn bevy_simplenet_hello_world()
     else { panic!("server should be disconnected after client is disconnected (by client)"); };
     let Some(bevy_simplenet::ClientReport::ClosedBySelf) = websocket_client.next_report()
     else { panic!("client should have closed itself"); };
+    let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
+    else { panic!("client should be closed by server"); };
     assert_eq!(client_id, dc_client_id);
 
 

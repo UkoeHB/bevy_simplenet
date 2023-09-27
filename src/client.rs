@@ -16,9 +16,9 @@ use std::marker::PhantomData;
 #[derive(Debug, Resource)]
 pub struct Client<ServerMsg, ClientMsg, ConnectMsg>
 where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize,
+    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
 {
     /// this client's id
     client_id: u128,
@@ -47,7 +47,12 @@ where
     pub type Factory = ClientFactory<ServerMsg, ClientMsg, ConnectMsg>;
 
     /// Send message to server.
-    /// Messages will be buffered while the client is connecting/reconnecting.
+    ///
+    /// Sending is reliable when the server is connected, but unreliable around disconnect events. If a disconnect
+    /// report is emitted from the client, you should assume all sent messages that did not receive a server response
+    /// failed. Furthermore, this method will silently fail until the client
+    /// reconnects and a connect report is emitted. TODO: cache messages that fail to send until a timeout
+    ///
     /// Returns `Err` if the client is dead (calls to `Client::is_dead()` may return true for a short time
     /// after this returns `Err`). Messages will silently fail if buffered and not sent due to the client dying.
     pub fn send(&self, msg: &ClientMsg) -> Result<(), ()>
@@ -75,7 +80,7 @@ where
         Some(msg)
     }
 
-    /// Try to get next client connection report.
+    /// Try to get next client report.
     pub fn next_report(&self) -> Option<ClientReport>
     {
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
@@ -89,6 +94,7 @@ where
     }
 
     /// Test if client is dead (no longer connected to server and won't reconnect).
+    /// - Note that a `ClientReport::IsDead` will be emitted by `Client::next_report()` when the client's internal actor dies.
     pub fn is_dead(&self) -> bool
     {
         self.client_closed_signal.done()
@@ -118,6 +124,18 @@ where
         {
             tracing::error!(?err, "failed to forward connection event to client");
         }
+    }
+}
+
+impl<ServerMsg, ClientMsg, ConnectMsg> Drop for Client<ServerMsg, ClientMsg, ConnectMsg>
+where
+    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+{
+    fn drop(&mut self)
+    {
+        self.close();
     }
 }
 

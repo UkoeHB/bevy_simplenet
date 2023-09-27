@@ -45,7 +45,7 @@ pub struct ServerConfig
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Emitted by clients when they connect/disconnect.
+/// Emitted by clients when they connect/disconnect/shut down.
 #[derive(Debug, Clone)]
 pub enum ClientReport
 {
@@ -53,6 +53,7 @@ pub enum ClientReport
     Disconnected,
     ClosedByServer(Option<ezsockets::CloseFrame>),
     ClosedBySelf,
+    IsDead,
 }
 
 //-------------------------------------------------------------------------------------------------------------------

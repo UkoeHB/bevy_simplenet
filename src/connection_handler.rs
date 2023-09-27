@@ -358,7 +358,7 @@ where
         tracing::info!(id, "unregistering session");
         self.session_registry.remove(&id);
 
-        // send connection report
+        // send disconnect report
         if let Err(err) = self.connection_report_sender.send(ServerReport::<ConnectMsg>::Disconnected(id))
         {
             tracing::error!(?err, "forwarding disconnect report failed");
