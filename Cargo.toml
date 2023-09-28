@@ -9,6 +9,14 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/UkoeHB/bevy_simplenet"
 
+[features]
+default     = []
+tls-rustls  = ["axum-server/tls-rustls"]
+tls-openssl = ["axum-server/tls-openssl"]
+#todo: client
+#todo: server: axum, axum-server, ezsockets/axum, tokio
+#todo: bevy: bevy
+
 [lib]
 path = "src/lib.rs"
 test = false
@@ -19,20 +27,21 @@ path = "tests/test/mod.rs"
 doctest = false
 
 [dependencies]
-async-trait     = { version = "0.1.71" }
+async-trait     = { version = "0.1" }
+axum            = { version = "0.6" }
+axum-server     = { version = "0.5" }
 bevy            = { version = "0.11", default-features = false }
-bincode         = { version = "1.3.3" }
-crossbeam       = { version = "0.8.2" }
+bincode         = { version = "1.3" }
+crossbeam       = { version = "0.8" }
 enfync          = { git = "https://github.com/UkoeHB/enfync.git", branch = "master" }
-ezsockets       = { git = "https://github.com/gbaranski/ezsockets.git", rev = "9bef190", features = [ "tungstenite" ] }
-form_urlencoded = { version = "1.2.0" }
-futures         = { version = "0.3.0" }
-serde           = { version = "1.0.160" }
-serde_json      = { version = "1.0.100" }
-serde_with      = { version = "3.0.0" }
-tokio           = { version = "1.29.1", features = [ "rt-multi-thread" ] }
-tracing         = { version = "0.1.32" }
-url             = { version = "2.4.0" }
+ezsockets       = { git = "https://github.com/gbaranski/ezsockets.git", rev = "7a56950", features = [ "axum" ] }
+form_urlencoded = { version = "1.2" }
+serde           = { version = "1.0" }
+serde_json      = { version = "1.0" }
+serde_with      = { version = "3.0" }
+tokio           = { version = "1.29" }
+tracing         = { version = "0.1" }
+url             = { version = "2.4" }
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.9" }
+tracing-subscriber = { version = "0.3" }

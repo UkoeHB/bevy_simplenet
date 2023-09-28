@@ -43,14 +43,11 @@ fn rate_limit_test(max_count_per_period: u32)
     let server_runtime = enfync::builtin::Handle::default();
     let client_runtime = enfync::builtin::Handle::default();
 
-    // prepare connection acceptor
-    let plain_acceptor = ezsockets::tungstenite::Acceptor::Plain;
-
     // launch websocket server
-    let websocket_server = enfync::blocking::extract(server_demo_factory().new_server(
+    let websocket_server = server_demo_factory().new_server(
             server_runtime,
             "127.0.0.1:0",
-            plain_acceptor,
+            bevy_simplenet::AcceptorConfig::Default,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ServerConfig{
                 max_connections   : 10,
@@ -60,7 +57,7 @@ fn rate_limit_test(max_count_per_period: u32)
                         max_count : max_count_per_period
                     }
             }
-        )).unwrap();
+        );
 
     let websocket_url = websocket_server.url();
 

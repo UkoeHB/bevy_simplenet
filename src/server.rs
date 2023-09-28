@@ -1,12 +1,12 @@
 //disable warnings
-#![allow(irrefutable_let_patterns)]
+//#![allow(irrefutable_let_patterns)]
 
 //local shortcuts
 use crate::*;
 
 //third-party shortcuts
 use bevy::prelude::Resource;
-use enfync::{AdoptOrDefault, HandleTrait};
+use enfync::HandleTrait;
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
@@ -15,6 +15,55 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+async fn websocket_handler<ServerMsg, ClientMsg, ConnectMsg>(
+    axum::Extension(server)     : axum::Extension<ezsockets::Server<ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>>>,
+    axum::extract::Query(_query) : axum::extract::Query<HashMap<String, String>>,
+    ezsocket_upgrade            : ezsockets::axum::Upgrade,
+) -> impl axum::response::IntoResponse
+where
+    ServerMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+{
+    //todo
+    /*{
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            "we won't accept you because of ......",
+        ).into_response();
+    }*/
+    ezsocket_upgrade.on_upgrade(server)
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor_config: AcceptorConfig)
+{
+    // set listener
+    let server = axum_server::Server::from_tcp(listener);
+
+    // set acceptor
+    let server = match acceptor_config
+    {
+        AcceptorConfig::Default         => server.acceptor(axum_server::accept::DefaultAcceptor::new()),
+        #[cfg(feature = "tls-rustls")]
+        AcceptorConfig::Rustls(config)  => server.acceptor(axum_server::tls_rustls::RustlsAcceptor::new(config)),
+        #[cfg(feature = "tls-openssl")]
+        AcceptorConfig::OpenSSL(config) => server.acceptor(axum_server::tls_openssl::OpenSSLAcceptor::new(config)),
+    };
+
+    // serve it
+    if let Err(err) = server.serve(app.into_make_service_with_connect_info::<SocketAddr>()).await
+    {
+        tracing::error!(?err, "server stopped running with error");
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Debug, Resource)]
@@ -121,6 +170,18 @@ where
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Configuration for server's connection acceptor. Default is non-TLS.
+pub enum AcceptorConfig
+{
+    Default,
+    #[cfg(feature = "tls-rustls")]
+    Rustls(axum_server::tls_rustls::RustlsConfig),
+    #[cfg(feature = "tls-openssl")]
+    OpenSSL(axum_server::tls_openssl::OpenSSLConfig),
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Factory for producing servers that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
@@ -148,38 +209,14 @@ where
 
     /// Make a new server.
     pub fn new_server<A>(&self,
-        runtime_handle      : enfync::builtin::Handle,
-        address             : A,
-        connection_acceptor : ezsockets::tungstenite::Acceptor,
-        authenticator       : Authenticator,
-        config              : ServerConfig,
-    ) -> enfync::PendingResult<Server<ServerMsg, ClientMsg, ConnectMsg>>
-    where
-        A: tokio::net::ToSocketAddrs + Send + 'static
-    {
-        tracing::info!("new server pending");
-        let factory_clone = self.clone();
-        runtime_handle.spawn(
-                async move {
-                    factory_clone.new_server_async(
-                            address,
-                            connection_acceptor,
-                            authenticator,
-                            config
-                        ).await
-                }
-            )
-    }
-
-    /// Make a new server (async).
-    pub async fn new_server_async<A>(&self,
-        address             : A,
-        connection_acceptor : ezsockets::tungstenite::Acceptor,
-        authenticator       : Authenticator,
-        config              : ServerConfig
+        runtime_handle  : enfync::builtin::Handle,
+        address         : A,
+        acceptor_config : AcceptorConfig,
+        authenticator   : Authenticator,
+        config          : ServerConfig
     ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
     where
-        A: tokio::net::ToSocketAddrs + Send + 'static
+        A: std::net::ToSocketAddrs + Send + 'static,
     {
         #[cfg(wasm)]
         { panic!("bevy simplenet servers not supported on WASM!"); }
@@ -195,19 +232,22 @@ where
             ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
 
         // make server core with our connection handler
-        let runtime_handle = enfync::builtin::Handle::adopt_or_default();
-        let (server, server_worker) = ezsockets::Server::create(
-                move |_server|
-                ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
-                        authenticator,
-                        protocol_version: self.protocol_version,
-                        config,
-                        connection_report_sender,
-                        session_registry: HashMap::default(),
-                        client_msg_sender,
-                        _phantom: std::marker::PhantomData::default()
-                    }
-            );
+        // note: ezsockets::Server::create() must be called from within a tokio runtime
+        let protocol_version = self.protocol_version;
+        let (server, server_worker) = enfync::blocking::extract(runtime_handle.spawn(async move {
+                ezsockets::Server::create(
+                        move |_server|
+                        ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
+                                authenticator,
+                                protocol_version,
+                                config,
+                                connection_report_sender,
+                                session_registry: HashMap::default(),
+                                client_msg_sender,
+                                _phantom: std::marker::PhantomData::default()
+                            }
+                    )
+            })).unwrap();
         let server_closed_signal = runtime_handle.spawn(
                 async move {
                     if let Err(err) = server_worker.await
@@ -218,24 +258,17 @@ where
             );
 
         // prepare listener
-        let connection_listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        let connection_listener = std::net::TcpListener::bind(address).unwrap();
         let server_address = connection_listener.local_addr().unwrap();
-        let mut uses_tls = false;
-        if let ezsockets::tungstenite::Acceptor::Plain = connection_acceptor {} else { uses_tls = true; }
+        let uses_tls = !matches!(acceptor_config, AcceptorConfig::Default);
 
         // launch the server core
-        let server_clone = server.clone();
+        let app = axum::Router::new()
+            .route("/ws", axum::routing::get(websocket_handler::<ServerMsg, ClientMsg, ConnectMsg>))
+            .layer(axum::Extension(server.clone()));
+
         let server_running_signal = runtime_handle.spawn(
-                async move {
-                    if let Err(err) = ezsockets::tungstenite::run_on(
-                            server_clone,
-                            connection_listener,
-                            connection_acceptor
-                        ).await
-                    {
-                        tracing::error!(?err, "server stopped running with error");
-                    }
-                }
+                async move { run_server(app, connection_listener, acceptor_config).await }
             );
 
         // finish assembling our server

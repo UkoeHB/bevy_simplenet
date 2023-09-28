@@ -158,7 +158,7 @@ pub(crate) enum SessionCommand<ServerMsg: Debug + Clone>
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Make a websocket url: {ws, wss}://[ip:port]/websocket.
+/// Make a websocket url: {ws, wss}://[ip:port]/ws.
 pub fn make_websocket_url(with_tls: bool, address: SocketAddr) -> Result<url::Url, ()>
 {
     let mut url = url::Url::parse("https://example.net").map_err(|_| ())?;
@@ -166,7 +166,7 @@ pub fn make_websocket_url(with_tls: bool, address: SocketAddr) -> Result<url::Ur
     url.set_scheme(scheme)?;
     url.set_ip_host(address.ip())?;
     url.set_port(Some(address.port()))?;
-    url.set_path("/websocket");
+    url.set_path("/ws");
     Ok(url)
 }
 

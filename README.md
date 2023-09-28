@@ -62,10 +62,10 @@ tracing::info!("README test start");
 
 
 // make a server
-let server = enfync::blocking::extract(server_factory().new_server(
+let server = server_factory().new_server(
         enfync::builtin::Handle::default(),
         "127.0.0.1:0",
-        ezsockets::tungstenite::Acceptor::Plain,
+        bevy_simplenet::AcceptorConfig::Default,
         bevy_simplenet::Authenticator::None,
         bevy_simplenet::ServerConfig{
             max_connections   : 10,
@@ -75,7 +75,7 @@ let server = enfync::blocking::extract(server_factory().new_server(
                     max_count : 25
                 }
         }
-    )).unwrap();
+    );
 
 
 // make a client
