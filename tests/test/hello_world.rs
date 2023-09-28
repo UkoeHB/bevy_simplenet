@@ -101,7 +101,8 @@ fn bevy_simplenet_hello_world()
     // send message: client -> server
     tracing::info!("ws hello world test: client sending msg...");
     let client_val = 42;
-    websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -109,6 +110,7 @@ fn bevy_simplenet_hello_world()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_val, msg_client_val);
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
 
 
     // send message: server -> client

@@ -15,6 +15,7 @@ Provides a simple server/client channel implemented over websockets that can be 
 - Tracing levels assume the server is trusted and clients are not trusted.
 - When defining a channel, it is recommended to write functions that spit out server/client factories. Those functions can reference the desired protocol version, e.g. the constant `env!("CARGO_PKG_VERSION")`.
 - Servers can use TLS via `ezsockets::tungstenite::Acceptor`. See [ezsockets](https://docs.rs/ezsockets/latest/ezsockets/) documentation.
+- A server or client message may fail to send if the underlying connection is broken. Clients can use the [`ezsockets::MessageSignal`] returned from [`Client::send()`] to track the status of a message. Message tracking is not available for servers.
 
 
 
@@ -98,8 +99,10 @@ assert_eq!(connect_msg.0, String::from("hello"));
 
 
 // send message: client -> server
-client.send(&ClientMsg(42)).unwrap();
+let signal = client.send(&ClientMsg(42)).unwrap();
+assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
 
 
 // read message from client

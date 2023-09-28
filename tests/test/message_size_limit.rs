@@ -114,7 +114,8 @@ fn message_size_limit_test(max_msg_size: u32)
     assert_eq!(connect_msg.0, connect_msg.0);
 
     // send message with invalid size: client -> server
-    websocket_client.send(&DemoClientMsg(large_msg)).unwrap();
+    let signal = websocket_client.send(&DemoClientMsg(large_msg)).unwrap();
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -122,6 +123,7 @@ fn message_size_limit_test(max_msg_size: u32)
     let None = websocket_server.next_msg() else { panic!("server received client msg"); };
 
     // expect client was disconnected
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);  //sent and then server shut us down
     assert!(websocket_client.is_dead());
 
     let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()

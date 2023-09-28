@@ -87,7 +87,8 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // send message: client -> server
     let client_val = 42;
-    websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -95,24 +96,27 @@ fn rate_limit_test(max_count_per_period: u32)
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_val, msg_client_val);
+    assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
 
 
 
     // send messages to fill up server rate limiter to the brim
+    let mut signals = Vec::new();
     for _ in 0..max_count_per_period
     {
-        websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+        signals.push(websocket_client.send(&DemoClientMsg(client_val)).unwrap());
     }
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
     // expect all messages received
-    for _ in 0..max_count_per_period
+    for i in 0..max_count_per_period
     {
         let Some((msg_client_id, DemoClientMsg(msg_client_val))) = websocket_server.next_msg()
         else { panic!("server did not receive client msg"); };
         assert_eq!(client_id, msg_client_id);
         assert_eq!(client_val, msg_client_val);
+        assert_eq!(signals[i as usize].status(), ezsockets::MessageStatus::Sent);
     }
 
     // server should still be alive
@@ -124,20 +128,22 @@ fn rate_limit_test(max_count_per_period: u32)
 
 
     // send messages to fill up server rate limiter past the brim
+    let mut signals = Vec::new();
     for _ in 0..(max_count_per_period + 1)
     {
-        websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+        signals.push(websocket_client.send(&DemoClientMsg(client_val)).unwrap());
     }
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
     // expect all message except last received
-    for _ in 0..max_count_per_period
+    for i in 0..max_count_per_period
     {
         let Some((msg_client_id, DemoClientMsg(msg_client_val))) = websocket_server.next_msg()
         else { panic!("server did not receive client msg"); };
         assert_eq!(client_id, msg_client_id);
         assert_eq!(client_val, msg_client_val);
+        assert_eq!(signals[i as usize].status(), ezsockets::MessageStatus::Sent);
     }
 
     // server should still be alive
@@ -147,7 +153,8 @@ fn rate_limit_test(max_count_per_period: u32)
     let None = websocket_server.next_msg()
     else { panic!("server received more client msgs than expected"); };
 
-    // expect client was disconnected
+    // expect client was disconnected (message sent and then server shut us down)
+    assert_eq!(signals[max_count_per_period as usize].status(), ezsockets::MessageStatus::Sent);
     assert!(websocket_client.is_dead());
 
     let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()

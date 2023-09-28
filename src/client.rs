@@ -53,9 +53,12 @@ where
     /// failed. Furthermore, this method will silently fail until the client
     /// reconnects and a connect report is emitted. TODO: cache messages that fail to send until a timeout
     ///
-    /// Returns `Err` if the client is dead (calls to `Client::is_dead()` may return true for a short time
-    /// after this returns `Err`). Messages will silently fail if buffered and not sent due to the client dying.
-    pub fn send(&self, msg: &ClientMsg) -> Result<(), ()>
+    /// Returns `Ok(ezsockets::MessageSignal)` on success. The signal can be used to track the message status. Messages
+    /// will fail if the underlying client becomes disconnected.
+    ///
+    /// Returns `Err` if the client is dead (calls to `Client::is_dead()` may return false for a short time
+    /// after this returns `Err`).
+    pub fn send(&self, msg: &ClientMsg) -> Result<ezsockets::MessageSignal, ()>
     {
         if self.is_dead()
         {
@@ -65,12 +68,15 @@ where
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(msg) else { return Err(()); };
-        if let Err(_) = self.client.binary(ser_msg)
+        match self.client.binary(ser_msg)
         {
-            tracing::warn!("tried to send message to dead client");
-            return Err(());
+            Ok(signal) => Ok(signal),
+            Err(_) =>
+            {
+                tracing::warn!("tried to send message to dead client");
+                Err(())
+            }
         }
-        Ok(())
     }
 
     /// Try to get next message received from server.
