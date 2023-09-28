@@ -1,6 +1,6 @@
 # Bevy SimpleNet {INITIAL RELEASE IS WIP}
 
-Provides a bi-directional server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server` (todo: `bevy` default feature). This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
+Provides a bi-directional server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server` (the `bevy` feature is enabled by default). This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
 
 **Warning**: This crate requires nightly rust (see open TODOs).
 

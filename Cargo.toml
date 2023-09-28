@@ -10,12 +10,12 @@ readme = "README.md"
 repository = "https://github.com/UkoeHB/bevy_simplenet"
 
 [features]
-default     = []
+default     = ["bevy"]
+bevy        = ["dep:bevy_ecs"]
 tls-rustls  = ["axum-server/tls-rustls"]
 tls-openssl = ["axum-server/tls-openssl"]
 #todo: client
 #todo: server: axum, axum-server, ezsockets/axum, tokio
-#todo: bevy: bevy
 
 [lib]
 path = "src/lib.rs"
@@ -30,7 +30,6 @@ doctest = false
 async-trait     = { version = "0.1" }
 axum            = { version = "0.6" }
 axum-server     = { version = "0.5" }
-bevy            = { version = "0.11", default-features = false }
 bincode         = { version = "1.3" }
 crossbeam       = { version = "0.8" }
 enfync          = { git = "https://github.com/UkoeHB/enfync.git", branch = "master" }
@@ -42,6 +41,9 @@ serde_with      = { version = "3.0" }
 tokio           = { version = "1.29" }
 tracing         = { version = "0.1" }
 url             = { version = "2.4" }
+
+# optional deps
+bevy_ecs = { version = "0.11", optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3" }

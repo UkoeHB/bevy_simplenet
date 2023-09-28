@@ -2,7 +2,6 @@
 use crate::*;
 
 //third-party shortcuts
-use bevy::prelude::Resource;
 use bincode::Options;
 use enfync::{AdoptOrDefault, HandleTrait};
 use serde::{Serialize, Deserialize};
@@ -13,7 +12,8 @@ use std::marker::PhantomData;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Debug, Resource)]
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Client<ServerMsg, ClientMsg, ConnectMsg>
 where
     ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,

@@ -5,7 +5,6 @@
 use crate::*;
 
 //third-party shortcuts
-use bevy::prelude::Resource;
 use enfync::HandleTrait;
 use serde::{Serialize, Deserialize};
 
@@ -66,7 +65,8 @@ async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Debug, Resource)]
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Server<ServerMsg, ClientMsg, ConnectMsg>
 where
     ServerMsg: Clone + Debug + Send + Sync + Serialize,
