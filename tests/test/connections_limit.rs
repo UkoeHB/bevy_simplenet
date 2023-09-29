@@ -42,7 +42,7 @@ fn connections_limit_test(max_connections: u32)
     assert!(max_connections > 0);
 
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::builtin::Handle::default();
+    let server_runtime = enfync::builtin::native::TokioHandle::default();
     let client_runtime = enfync::builtin::Handle::default();
 
     // launch websocket server

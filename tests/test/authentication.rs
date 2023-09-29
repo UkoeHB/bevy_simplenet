@@ -40,7 +40,7 @@ fn client_demo_factory() -> ClientDemo::Factory
 fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_request: bevy_simplenet::AuthRequest) -> bool
 {
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::builtin::Handle::default();
+    let server_runtime = enfync::builtin::native::TokioHandle::default();
     let client_runtime = enfync::builtin::Handle::default();
 
     // launch websocket server

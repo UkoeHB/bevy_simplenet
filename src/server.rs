@@ -208,8 +208,10 @@ where
     }
 
     /// Make a new server.
+    ///
+    /// Only works with a tokio runtime handle.
     pub fn new_server<A>(&self,
-        runtime_handle  : enfync::builtin::Handle,
+        runtime_handle  : enfync::builtin::native::TokioHandle,
         address         : A,
         acceptor_config : AcceptorConfig,
         authenticator   : Authenticator,

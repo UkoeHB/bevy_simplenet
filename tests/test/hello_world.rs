@@ -50,7 +50,7 @@ fn bevy_simplenet_hello_world()
     */
 
     // prepare tokio runtimes for server and client
-    let server_runtime = enfync::builtin::Handle::default();
+    let server_runtime = enfync::builtin::native::TokioHandle::default();
     let client_runtime = enfync::builtin::Handle::default();
 
     // launch websocket server

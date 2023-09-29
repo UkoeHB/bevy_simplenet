@@ -72,7 +72,7 @@ tracing::info!("README test start");
 
 // make a server
 let server = server_factory().new_server(
-        enfync::builtin::Handle::default(),
+        enfync::builtin::native::TokioHandle::default(),
         "127.0.0.1:0",
         bevy_simplenet::AcceptorConfig::Default,
         bevy_simplenet::Authenticator::None,
