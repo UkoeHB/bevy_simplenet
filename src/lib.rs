@@ -5,24 +5,35 @@
 #![allow(incomplete_features)]
 #![feature(inherent_associated_types)]
 
-//module tree
-mod authentication;
-mod client;
-mod client_handler;
-mod common;
-mod connection_handler;
-mod errors;
-mod rate_limiter;
-mod server;
-mod session_handler;
+//common
+cfg_if::cfg_if! { if #[cfg(any(feature = "client", feature = "server"))] {
+    mod authentication;
+    mod common;
+    mod errors;
+    mod rate_limiter;
 
-//API exports
-pub use crate::authentication::*;
-pub use crate::client::*;
-pub(crate) use crate::client_handler::*;
-pub use crate::common::*;
-pub(crate) use crate::connection_handler::*;
-pub(crate) use crate::errors::*;
-pub use crate::rate_limiter::*;
-pub use crate::server::*;
-pub(crate) use crate::session_handler::*;
+    pub use crate::authentication::*;
+    pub use crate::common::*;
+    pub(crate) use crate::errors::*;
+    pub use crate::rate_limiter::*;
+}}
+
+//client
+cfg_if::cfg_if! { if #[cfg(feature = "client")] {
+    mod client;
+    mod client_handler;
+
+    pub use crate::client::*;
+    pub(crate) use crate::client_handler::*;
+}}
+
+//server
+cfg_if::cfg_if! { if #[cfg(feature = "server")] {
+    mod connection_handler;
+    mod server;
+    mod session_handler;
+
+    pub(crate) use crate::connection_handler::*;
+    pub use crate::server::*;
+    pub(crate) use crate::session_handler::*;
+}}

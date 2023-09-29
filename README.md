@@ -1,14 +1,22 @@
 # Bevy SimpleNet {INITIAL RELEASE IS WIP}
 
-Provides a bi-directional server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server` (the `bevy` feature is enabled by default). This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
+Provides a bi-directional server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server`. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
 
 **Warning**: This crate requires nightly rust (see open TODOs).
 
 
+## Features
+
+- `default`: `bevy`, `client`, `server`
+- `bevy`: derives `bevy_ecs::system::Resource` on `Client` and `Server`
+- `client`: enables simplenet clients
+- `server`: enables simplenet servers
+- `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
+- `tls-openssl`: enables TLS for servers via [`OpenSSL`](https://crates.io/crates/openssl)
+
 
 ## Usage notes
 
-- Servers can use TLS via `AcceptorConfig` (features: `tls-rustls`, `tls-openssl`).
 - Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets` (TODO: WASM client backend).
 - A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
 - Server session ids equal client ids. Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client auth request will have the same session id. Connections will be rejected if an id is already connected.
@@ -27,7 +35,8 @@ use std::sync::Arc;
 
 
 // define a channel
-// - it is recommended to make server/client factories with baked-in protocol versions (e.g. with env!("CARGO_PKG_VERSION"))
+// - it is recommended to make server/client factories with baked-in protocol versions (e.g.
+//   with env!("CARGO_PKG_VERSION"))
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerMsg(pub u64);
 

@@ -48,15 +48,10 @@ where
 
     /// Send message to server.
     ///
-    /// Sending is reliable when the server is connected, but unreliable around disconnect events. If a disconnect
-    /// report is emitted from the client, you should assume all sent messages that did not receive a server response
-    /// failed. Furthermore, this method will silently fail until the client
-    /// reconnects and a connect report is emitted. TODO: cache messages that fail to send until a timeout
-    ///
     /// Returns `Ok(ezsockets::MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is dead (calls to `Client::is_dead()` may return false for a short time
+    /// Returns `Err` if the client is dead (calls to [`is_dead()`] may return false for a short time
     /// after this returns `Err`).
     pub fn send(&self, msg: &ClientMsg) -> Result<ezsockets::MessageSignal, ()>
     {
