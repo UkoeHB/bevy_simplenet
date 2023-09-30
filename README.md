@@ -8,7 +8,7 @@ Provides a bi-directional server/client channel implemented over websockets that
 ## Features
 
 - `default`: `bevy`, `client`, `server`
-- `bevy`: derives `bevy_ecs::system::Resource` on `Client` and `Server`
+- `bevy`: derives `Resource` on `Client` and `Server`
 - `client`: enables simplenet clients
 - `server`: enables simplenet servers
 - `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
@@ -20,7 +20,7 @@ Provides a bi-directional server/client channel implemented over websockets that
 - Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets` (TODO: WASM client backend).
 - A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
 - Server session ids equal client ids. Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client auth request will have the same session id. Connections will be rejected if an id is already connected.
-- Connect messages will be reused for all reconnect attempts by clients, so they should be treated as static data.
+- Connect messages will be cloned for all reconnect attempts by clients, so they should be treated as static data.
 - Server or client messages may fail to send if the underlying connection is broken. Clients can use the [`ezsockets::MessageSignal`] returned from [`Client::send()`] to track the status of a message. Message tracking is not currently available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.
 
@@ -46,17 +46,17 @@ pub struct ClientMsg(pub u64);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConnectMsg(pub String);
 
-type Server = bevy_simplenet::Server::<ServerMsg, ClientMsg, ConnectMsg>;
-type Client = bevy_simplenet::Client::<ServerMsg, ClientMsg, ConnectMsg>;
+type TestServer = bevy_simplenet::Server::<ServerMsg, ClientMsg, ConnectMsg>;
+type TestClient = bevy_simplenet::Client::<ServerMsg, ClientMsg, ConnectMsg>;
 
-fn server_factory() -> Server::Factory
+fn server_factory() -> TestServer::Factory
 {
-    Server::Factory::new("test")
+    TestServer::Factory::new("test")
 }
 
-fn client_factory() -> Client::Factory
+fn client_factory() -> TestClient::Factory
 {
-    Client::Factory::new("test")  //must use same protocol version string as the server
+    TestClient::Factory::new("test")  //must use same protocol version string as the server
 }
 
 

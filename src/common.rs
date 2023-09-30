@@ -14,10 +14,10 @@ pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) const VERSION_MSG_KEY: &'static str = "v";
-pub(crate) const TYPE_MSG_KEY: &'static str    = "t";
-pub(crate) const AUTH_MSG_KEY: &'static str    = "a";
-pub(crate) const CONNECT_MSG_KEY: &'static str = "c";
+pub(crate) const VERSION_MSG_KEY : &'static str = "v";
+pub(crate) const TYPE_MSG_KEY    : &'static str = "t";
+pub(crate) const AUTH_MSG_KEY    : &'static str = "a";
+pub(crate) const CONNECT_MSG_KEY : &'static str = "c";
 
 //-------------------------------------------------------------------------------------------------------------------
 
