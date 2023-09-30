@@ -66,7 +66,9 @@ fn bevy_simplenet_hello_world()
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
                         period    : std::time::Duration::from_secs(1),
                         max_count : 20
-                    }
+                    },
+                heartbeat_interval : std::time::Duration::from_secs(5),
+                keepalive_timeout  : std::time::Duration::from_secs(10),
             }
         );
 

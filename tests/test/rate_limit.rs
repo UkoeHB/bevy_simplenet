@@ -55,7 +55,9 @@ fn rate_limit_test(max_count_per_period: u32)
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
                         period    : std::time::Duration::from_millis(15),  //15ms to coordinate with async waits
                         max_count : max_count_per_period
-                    }
+                    },
+                heartbeat_interval : std::time::Duration::from_secs(5),
+                keepalive_timeout  : std::time::Duration::from_secs(10),
             }
         );
 

@@ -55,7 +55,9 @@ fn message_size_limit_test(max_msg_size: u32)
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
                         period    : std::time::Duration::from_millis(15),
                         max_count : 25
-                    }
+                    },
+                heartbeat_interval : std::time::Duration::from_secs(5),
+                keepalive_timeout  : std::time::Duration::from_secs(10),
             }
         );
 

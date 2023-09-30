@@ -13,9 +13,13 @@ use std::vec::Vec;
 
 #[derive(Debug)]
 pub(crate) struct ClientHandler<ServerMsg>
+where
+    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     /// config
     pub(crate) config: ClientConfig,
+    /// core websockets client
+    pub(crate) client: ezsockets::Client<ClientHandler<ServerMsg>>,
     /// collects connection events
     pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// collects messages from the server
@@ -29,16 +33,30 @@ where
 {
     type Call = ();
 
-    /// text from server
-    /// Does nothing.
-    async fn on_text(&mut self, _text: String) -> Result<(), ezsockets::Error>
+    /// Text from server.
+    /// - Does nothing on native.
+    /// - Echoes the text back to the server on WASM for custom Ping/Pong protocol.
+    async fn on_text(&mut self, text: String) -> Result<(), ezsockets::Error>
     {
-        // ignore text received
-        tracing::warn!("received text from server (not handled)");
+        match env_type()
+        {
+            EnvType::Native =>
+            {
+                // ignore text received
+                tracing::warn!("received text from server (not handled)");
+            }
+            EnvType::Wasm =>
+            {
+                // received Ping, send Pong back
+                tracing::info!(?text, "server ping");
+                let _ = self.client.text(text)?;
+            }
+        }
+
         Ok(())
     }
 
-    /// binary from server
+    /// Binary from server.
     async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), ezsockets::Error>
     {
         tracing::trace!("received binary from server");
@@ -61,7 +79,7 @@ where
         Ok(())
     }
 
-    /// call from associated client
+    /// Call from associated client.
     /// Does nothing.
     async fn on_call(&mut self, _msg: ()) -> Result<(), ezsockets::Error>
     {
@@ -70,7 +88,7 @@ where
         Ok(())
     }
 
-    /// respond to the client acquiring a connection
+    /// Respond to the client acquiring a connection.
     async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
         // forward event to client owner
@@ -82,7 +100,7 @@ where
         Ok(())
     }
 
-    /// respond to the client being disconnected
+    /// Respond to the client being disconnected.
     async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
         tracing::info!("disconnected");
@@ -102,7 +120,7 @@ where
         }
     }
 
-    /// respond to the client being closed by the server
+    /// Respond to the client being closed by the server.
     async fn on_close(
         &mut self,
         close_frame: Option<ezsockets::CloseFrame>
@@ -127,13 +145,15 @@ where
 }
 
 impl<ServerMsg> Drop for ClientHandler<ServerMsg>
+where
+    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     fn drop(&mut self)
     {
         // forward event to client owner
         if let Err(err) = self.connection_report_sender.send(ClientReport::IsDead)
         {
-            // failing may not be a mistake if the owning client was dropped
+            // failing may not be an error since the owning client could have been dropped
             tracing::debug!(?err, "failed to forward 'client is dead' report to client");
         }
     }

@@ -69,8 +69,20 @@ where
         // extract info from the request
         let info = extract_connection_info(&request, &self.session_registry)?;
 
-        // define Ping/Pong strategy based on client env type
-        //todo: info.client_env_type
+        // report the new connection
+        if let Err(err) = self.connection_report_sender.send(
+                ServerReport::<ConnectMsg>::Connected(info.id, info.connect_msg)
+            )
+        {
+            tracing::error!(?err, "forwarding connection report failed");
+            return Err(Some(ezsockets::CloseFrame{
+                    code   : ezsockets::CloseCode::Error,
+                    reason : String::from("Server internal error.")
+                }));
+        };
+
+        // increment the connection counter now so the updated value is available asap
+        self.connection_counter.increment();
 
         // make a session
         let client_msg_sender = self.client_msg_sender.clone();
@@ -92,21 +104,8 @@ where
                 socket
             );
 
-        // report the new connection
-        if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<ConnectMsg>::Connected(info.id, info.connect_msg)
-            )
-        {
-            tracing::error!(?err, "forwarding connection report failed");
-            return Err(Some(ezsockets::CloseFrame{
-                    code   : ezsockets::CloseCode::Error,
-                    reason : String::from("Server internal error.")
-                }));
-        };
-
         // register the session
         self.session_registry.insert(info.id, session.clone());
-        self.connection_counter.increment();
 
         Ok(session)
     }
@@ -120,8 +119,8 @@ where
     {
         // unregister session
         tracing::info!(id, "unregistering session");
-        self.session_registry.remove(&id);
         self.connection_counter.decrement();
+        self.session_registry.remove(&id);
 
         // send disconnect report
         if let Err(err) = self.connection_report_sender.send(ServerReport::<ConnectMsg>::Disconnected(id))

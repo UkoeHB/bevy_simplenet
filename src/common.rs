@@ -40,7 +40,11 @@ pub struct ServerConfig
     /// Max message size allowed from clients (bytes).
     pub max_msg_size: u32,
     /// Rate limit for messages received from a session.
-    pub rate_limit_config: RateLimitConfig
+    pub rate_limit_config: RateLimitConfig,
+    /// Duration between socket heartbeat pings if the connection is inactive.
+    pub heartbeat_interval: Duration,
+    /// Duration after which a socket will shut down if the connection is inactive.
+    pub keepalive_timeout: Duration,
 }
 
 //-------------------------------------------------------------------------------------------------------------------

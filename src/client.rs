@@ -224,10 +224,11 @@ where
         // make client core with our handler
         let connection_report_sender_clone = connection_report_sender.clone();
         let (client, client_handler_worker) = ezsockets::connect(
-                move |_client|
+                move |client|
                 {
                     ClientHandler::<ServerMsg>{
                             config,
+                            client,
                             connection_report_sender: connection_report_sender_clone,
                             server_msg_sender
                         }

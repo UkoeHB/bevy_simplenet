@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -199,10 +200,12 @@ impl Default for ConnectionCounter { fn default() -> Self { Self{ counter: Arc::
 #[derive(Debug)]
 pub(crate) struct ConnectionPrevalidator
 {
-    pub(crate) protocol_version : &'static str,
-    pub(crate) authenticator    : Authenticator,
-    pub(crate) max_connections  : u32,
-    pub(crate) max_msg_size     : u32,
+    pub(crate) protocol_version   : &'static str,
+    pub(crate) authenticator      : Authenticator,
+    pub(crate) max_connections    : u32,
+    pub(crate) max_msg_size       : u32,
+    pub(crate) heartbeat_interval : Duration,
+    pub(crate) keepalive_timeout  : Duration,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -211,7 +214,7 @@ pub(crate) fn prevalidate_connection_request(
     request         : &ezsockets::Request,
     num_connections : &ConnectionCounter,
     prevalidator    : &ConnectionPrevalidator,
-) -> Result<(), (axum::http::StatusCode, &'static str)>
+) -> Result<EnvType, (axum::http::StatusCode, &'static str)>
 {
     // check max connection count
     // - this is an approximate test since the counter is updated async
@@ -235,7 +238,7 @@ pub(crate) fn prevalidate_connection_request(
         .map_err(|reason| (axum::http::StatusCode::BAD_REQUEST, reason))?;
 
     // check that client env type is present
-    let _client_env_type = try_extract_client_env(query_elements_iterator.next())
+    let client_env_type = try_extract_client_env(query_elements_iterator.next())
         .map_err(|reason| (axum::http::StatusCode::BAD_REQUEST, reason))?;
 
     // validate authentication
@@ -251,7 +254,7 @@ pub(crate) fn prevalidate_connection_request(
     let None = query_elements_iterator.next()
     else { return Err((axum::http::StatusCode::PAYLOAD_TOO_LARGE, "Excess query elements.")); };
 
-    Ok(())
+    Ok(client_env_type)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -259,7 +262,6 @@ pub(crate) fn prevalidate_connection_request(
 #[derive(Debug)]
 pub(crate) struct ConnectionInfo<ConnectMsg>
 {
-    pub(crate) _client_env_type : EnvType,
     pub(crate) id              : u128,
     pub(crate) connect_msg     : ConnectMsg,
 }
@@ -283,8 +285,8 @@ where
     // ignore protocol version
     query_elements_iterator.next();
 
-    // get client's impelementation type
-    let client_env_type = try_extract_client_env(query_elements_iterator.next()).map_err(|_| None)?;
+    // get client's implementation type
+    let _client_env_type = try_extract_client_env(query_elements_iterator.next()).map_err(|_| None)?;
 
     // try to get client id
     let id = try_extract_client_id(query_elements_iterator.next()).map_err(|_| None)?;
@@ -310,7 +312,6 @@ where
         )?;
 
     Ok(ConnectionInfo{
-            _client_env_type: client_env_type,
             id,
             connect_msg,
         })

@@ -16,6 +16,40 @@ use std::sync::Arc;
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+fn socket_config(prevalidator: &ConnectionPrevalidator, client_env_type: EnvType) -> ezsockets::SocketConfig
+{
+    match client_env_type
+    {
+        EnvType::Native =>
+        {
+            // use the default heartbeat ping message function
+            ezsockets::SocketConfig{
+                heartbeat : prevalidator.heartbeat_interval,
+                timeout   : prevalidator.keepalive_timeout,
+                ..Default::default()
+            }
+        }
+        EnvType::Wasm =>
+        {
+            // use a custom Text-based ping message
+            ezsockets::SocketConfig{
+                heartbeat : prevalidator.heartbeat_interval,
+                timeout   : prevalidator.keepalive_timeout,
+                heartbeat_ping_msg_fn : Arc::new(
+                        |timestamp: std::time::Duration|
+                        {
+                            let timestamp = timestamp.as_millis();
+                            ezsockets::RawMessage::Text(timestamp.to_string())
+                        }
+                    )
+            }
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 async fn websocket_handler<ServerMsg, ClientMsg, ConnectMsg>(
     axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>>>,
     axum::Extension(count)  : axum::Extension<ConnectionCounter>,
@@ -27,15 +61,12 @@ where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
     ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
 {
-    // prevalidate
-    if let Err(err) = prevalidate_connection_request(ezsocket_upgrade.request(), &count, &preval)
+    // prevalidate then prepare upgrade
+    match prevalidate_connection_request(ezsocket_upgrade.request(), &count, &preval)
     {
-        return err.into_response();
+        Ok(client_env_type) => ezsocket_upgrade.on_upgrade_with_config(server, socket_config(&preval, client_env_type)),
+        Err(err) => err.into_response()
     }
-
-    // prepare upgrade
-    //todo: inject heartbeat config here based on client env type
-    ezsocket_upgrade.on_upgrade(server)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -268,10 +299,12 @@ where
 
         // prepare prevalidator
         let prevalidator = ConnectionPrevalidator{
-            protocol_version: self.protocol_version,
+                protocol_version   : self.protocol_version,
                 authenticator,
-                max_connections: config.max_connections,
-                max_msg_size: config.max_msg_size,
+                max_connections    : config.max_connections,
+                max_msg_size       : config.max_msg_size,
+                heartbeat_interval : config.heartbeat_interval,
+                keepalive_timeout  : config.keepalive_timeout,
             };
 
         // prepare router

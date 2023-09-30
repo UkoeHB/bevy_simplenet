@@ -53,11 +53,13 @@ fn connections_limit_test(max_connections: u32)
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ServerConfig{
                 max_connections,
-                max_msg_size: 10_000,
+                max_msg_size      : 10_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
                         period    : std::time::Duration::from_millis(15),
                         max_count : 25
-                    }
+                    },
+                heartbeat_interval : std::time::Duration::from_secs(5),
+                keepalive_timeout  : std::time::Duration::from_secs(10),
             }
         );
 
