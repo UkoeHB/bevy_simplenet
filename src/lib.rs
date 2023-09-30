@@ -30,10 +30,12 @@ cfg_if::cfg_if! { if #[cfg(feature = "client")] {
 //server
 cfg_if::cfg_if! { if #[cfg(feature = "server")] {
     mod connection_handler;
+    mod connection_validation;
     mod server;
     mod session_handler;
 
     pub(crate) use crate::connection_handler::*;
+    pub(crate) use crate::connection_validation::*;
     pub use crate::server::*;
     pub(crate) use crate::session_handler::*;
 }}

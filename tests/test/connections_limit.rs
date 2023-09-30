@@ -103,12 +103,10 @@ fn connections_limit_test(max_connections: u32)
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    // client should get closed by the server immediately
+    // client should fail to connect
     assert!(websocket_client.is_dead());
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
-    else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
-    else { panic!("client should be closed by server"); };
+    let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
+    else { panic!("client should have failed to connect"); };
     let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
 
@@ -158,10 +156,6 @@ fn connections_limit_test(max_connections: u32)
 
     // client should not connect
     assert!(websocket_client.is_dead());
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
-    else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
-    else { panic!("client should be closed by server"); };
     let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
     let None = websocket_server.next_report()

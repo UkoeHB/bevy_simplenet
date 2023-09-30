@@ -1,10 +1,8 @@
-//disable warnings
-//#![allow(irrefutable_let_patterns)]
-
 //local shortcuts
 use crate::*;
 
 //third-party shortcuts
+use axum::response::IntoResponse;
 use enfync::HandleTrait;
 use serde::{Serialize, Deserialize};
 
@@ -13,27 +11,30 @@ use core::fmt::Debug;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 async fn websocket_handler<ServerMsg, ClientMsg, ConnectMsg>(
-    axum::Extension(server)     : axum::Extension<ezsockets::Server<ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>>>,
-    axum::extract::Query(_query) : axum::extract::Query<HashMap<String, String>>,
-    ezsocket_upgrade            : ezsockets::axum::Upgrade,
+    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>>>,
+    axum::Extension(count)  : axum::Extension<ConnectionCounter>,
+    axum::Extension(preval) : axum::Extension<Arc<ConnectionPrevalidator>>,
+    ezsocket_upgrade        : ezsockets::axum::Upgrade,
 ) -> impl axum::response::IntoResponse
 where
     ServerMsg: Clone + Debug + Send + Sync + Serialize + 'static,
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
     ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
 {
-    //todo
-    /*{
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            "we won't accept you because of ......",
-        ).into_response();
-    }*/
+    // prevalidate
+    if let Err(err) = prevalidate_connection_request(ezsocket_upgrade.request(), &count, &preval)
+    {
+        return err.into_response();
+    }
+
+    // prepare upgrade
+    //todo: inject heartbeat config here based on client env type
     ezsocket_upgrade.on_upgrade(server)
 }
 
@@ -233,16 +234,21 @@ where
                 client_msg_receiver
             ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
 
+        // prepare connection counter
+        // - this is used to communication the current number of connections from the connection handler to the
+        //   connection prevalidator
+        let connection_counter = ConnectionCounter::default();
+
         // make server core with our connection handler
         // note: ezsockets::Server::create() must be called from within a tokio runtime
-        let protocol_version = self.protocol_version;
+        let connection_counter_clone = connection_counter.clone();
+
         let (server, server_worker) = enfync::blocking::extract(runtime_handle.spawn(async move {
                 ezsockets::Server::create(
                         move |_server|
                         ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
-                                authenticator,
-                                protocol_version,
                                 config,
+                                connection_counter: connection_counter_clone,
                                 connection_report_sender,
                                 session_registry: HashMap::default(),
                                 client_msg_sender,
@@ -250,6 +256,7 @@ where
                             }
                     )
             })).unwrap();
+
         let server_closed_signal = runtime_handle.spawn(
                 async move {
                     if let Err(err) = server_worker.await
@@ -259,16 +266,27 @@ where
                 }
             );
 
+        // prepare prevalidator
+        let prevalidator = ConnectionPrevalidator{
+            protocol_version: self.protocol_version,
+                authenticator,
+                max_connections: config.max_connections,
+                max_msg_size: config.max_msg_size,
+            };
+
+        // prepare router
+        let app = axum::Router::new()
+            .route("/ws", axum::routing::get(websocket_handler::<ServerMsg, ClientMsg, ConnectMsg>))
+            .layer(axum::Extension(server.clone()))
+            .layer(axum::Extension(Arc::new(prevalidator)))
+            .layer(axum::Extension(connection_counter));
+
         // prepare listener
         let connection_listener = std::net::TcpListener::bind(address).unwrap();
         let server_address = connection_listener.local_addr().unwrap();
         let uses_tls = !matches!(acceptor_config, AcceptorConfig::Default);
 
         // launch the server core
-        let app = axum::Router::new()
-            .route("/ws", axum::routing::get(websocket_handler::<ServerMsg, ClientMsg, ConnectMsg>))
-            .layer(axum::Extension(server.clone()));
-
         let server_running_signal = runtime_handle.spawn(
                 async move { run_server(app, connection_listener, acceptor_config).await }
             );

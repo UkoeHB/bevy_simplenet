@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct RateLimitConfig
 {
     /// Length of time to count messages.

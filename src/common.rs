@@ -32,7 +32,7 @@ pub enum ServerReport<ConnectMsg: Debug + Clone>
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Server-enforced constraints on client connections.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct ServerConfig
 {
     /// Max number of concurrent client connections.
