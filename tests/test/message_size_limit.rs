@@ -87,6 +87,7 @@ fn message_size_limit_test(max_msg_size: u32)
     assert!(websocket_client.is_dead());  //failed to connect
     let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
 
     // 3. client message size limit
@@ -109,6 +110,7 @@ fn message_size_limit_test(max_msg_size: u32)
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg.0);
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
     // send message with invalid size: client -> server
     let signal = websocket_client.send(&DemoClientMsg(large_msg)).unwrap();
@@ -130,6 +132,7 @@ fn message_size_limit_test(max_msg_size: u32)
     let Some(bevy_simplenet::ClientReport::IsDead) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
     assert_eq!(client_id, dc_client_id);
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
 
     // no more connection reports

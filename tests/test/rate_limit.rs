@@ -82,6 +82,7 @@ fn rate_limit_test(max_count_per_period: u32)
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg.0);
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
 
     // send message: client -> server
@@ -96,6 +97,7 @@ fn rate_limit_test(max_count_per_period: u32)
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_val, msg_client_val);
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
 
 
@@ -120,6 +122,7 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // server should still be alive
     assert!(!websocket_server.is_dead());
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
     // expect no more messages
     let None = websocket_server.next_msg()

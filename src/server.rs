@@ -109,6 +109,8 @@ where
     server_address: SocketAddr,
     /// whether or not the server uses TLS
     uses_tls: bool,
+    /// number of current connections
+    connection_counter: ConnectionCounter,
 
     /// sends messages to the internal connection handler
     server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
@@ -191,6 +193,12 @@ where
     pub fn url(&self) -> url::Url
     {
         make_websocket_url(self.uses_tls, self.server_address).unwrap()
+    }
+
+    /// Get number of connections.
+    pub fn num_connections(&self) -> u64
+    {
+        self.connection_counter.load()
     }
 
     /// Test if the server is dead.
@@ -312,7 +320,7 @@ where
             .route("/ws", axum::routing::get(websocket_handler::<ServerMsg, ClientMsg, ConnectMsg>))
             .layer(axum::Extension(server.clone()))
             .layer(axum::Extension(Arc::new(prevalidator)))
-            .layer(axum::Extension(connection_counter));
+            .layer(axum::Extension(connection_counter.clone()));
 
         // prepare listener
         let connection_listener = std::net::TcpListener::bind(address).unwrap();
@@ -329,6 +337,7 @@ where
         Server{
                 server_address,
                 uses_tls,
+                connection_counter,
                 server_msg_sender: server.into(),  //extract the call sender
                 connection_report_receiver,
                 client_msg_receiver,

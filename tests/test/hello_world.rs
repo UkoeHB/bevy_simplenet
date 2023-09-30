@@ -73,6 +73,7 @@ fn bevy_simplenet_hello_world()
         );
 
     let websocket_url = websocket_server.url();
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
 
 
@@ -95,6 +96,7 @@ fn bevy_simplenet_hello_world()
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg1.0);
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
 
     // send message: client -> server
@@ -137,6 +139,7 @@ fn bevy_simplenet_hello_world()
 
     assert!(!websocket_server.is_dead());
     assert!(websocket_client.is_dead());
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
     let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
     else { panic!("client should be closed by server"); };
@@ -165,6 +168,7 @@ fn bevy_simplenet_hello_world()
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
     assert_eq!(connect_msg.0, connect_msg2.0);
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
 
     // client closes client
@@ -175,6 +179,7 @@ fn bevy_simplenet_hello_world()
 
     assert!(!websocket_server.is_dead());
     assert!(websocket_client.is_dead());
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
     let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()
     else { panic!("server should be disconnected after client is disconnected (by client)"); };

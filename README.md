@@ -87,6 +87,7 @@ let server = server_factory().new_server(
             keepalive_timeout  : std::time::Duration::from_secs(10),
         }
     );
+assert_eq!(server.num_connections(), 0u64);
 
 
 // make a client
@@ -99,6 +100,7 @@ let client = enfync::blocking::extract(client_factory().new_client(
         ConnectMsg(String::from("hello"))
     )).unwrap();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+assert_eq!(server.num_connections(), 1u64);
 
 
 // read connection messages
@@ -135,6 +137,7 @@ assert_eq!(msg_server_val, 24);
 // client closes itself
 client.close();
 std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+assert_eq!(server.num_connections(), 0u64);
 
 
 // read disconnection messages
@@ -152,7 +155,6 @@ else { panic!("client not closed by self"); };
     - client id = hash(client key)
     - auth key signs { client id, token expiry }
     - client key signs { auth signature }
-- The server should count connections to better support authentication workflows that use an external service to issue auth tokens only if the server is not over-subscribed. Auth tokens should include an expiration time so disconnected clients can be forced to reconnect via the auth service.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
 - Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs) or [this crate](https://docs.rs/ws_stream_wasm/latest/ws_stream_wasm/)).
 - Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `Server::send()` method.

@@ -64,6 +64,7 @@ fn connections_limit_test(max_connections: u32)
         );
 
     let websocket_url = websocket_server.url();
+    assert_eq!(websocket_server.num_connections(), 0u64);
 
 
     // 1. connect 'max connections' clients
@@ -89,6 +90,7 @@ fn connections_limit_test(max_connections: u32)
         else { panic!("client should be connected to server"); };
         let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
         else { panic!("server should be connected to client: {}", client_num); };
+        assert_eq!(websocket_server.num_connections(), 1u64 + client_num as u64);
 
         clients.push(websocket_client);
     }
@@ -111,6 +113,7 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("client should have failed to connect"); };
     let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
+    assert_eq!(websocket_server.num_connections(), max_connections as u64);
 
     // 3. disconnect one client
     let client_to_disconnect = clients.pop().expect("there should be at least one connected client");
@@ -122,6 +125,7 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("client should be closed by self"); };
     let Some(bevy_simplenet::ServerReport::Disconnected(_)) = websocket_server.next_report()
     else { panic!("server should see a disconnected client"); };
+    assert_eq!(websocket_server.num_connections(), (max_connections - 1) as u64);
 
     // 4. adding a client should now succeed
     // make client
@@ -141,6 +145,7 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("client should be connected to server"); };
     let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
     else { panic!("server should be connected to client"); };
+    assert_eq!(websocket_server.num_connections(), max_connections as u64);
 
     clients.push(websocket_client);  //save client so it doesn't get dropped
 
@@ -162,6 +167,7 @@ fn connections_limit_test(max_connections: u32)
     else { panic!("client should be closed by server"); };
     let None = websocket_server.next_report()
     else { panic!("server should not connect to another client"); };
+    assert_eq!(websocket_server.num_connections(), max_connections as u64);
 
 
     // no more connection reports
