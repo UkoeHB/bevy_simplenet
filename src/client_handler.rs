@@ -47,9 +47,32 @@ where
             }
             EnvType::Wasm =>
             {
-                // received Ping, send Pong back
-                tracing::info!(?text, "server ping");
-                let _ = self.client.text(text)?;
+                // received Ping or Pong
+                let Some((var, value)) = text.as_str().split_once(':')
+                else { tracing::warn!("ignoring invalid text from server..."); return Ok(()); };
+
+                // try to deserialize timestamp
+                let Ok(timestamp) = u128::from_str_radix(value, 10u32)
+                else { tracing::warn!("ignoring invalid ping/pong from server..."); return Ok(()); };
+
+                match var
+                {
+                    "ping" =>
+                    {
+                        // received Ping, send Pong back
+                        tracing::info!(?value, "server ping");
+                        let _ = self.client.text(format!("pong:{}", value))?;
+                    }
+                    "pong" =>
+                    {
+                        // received Pong, log latency
+                        log_ping_pong_latency(timestamp);
+                    }
+                    _ =>
+                    {
+                        tracing::warn!("ignoring invalid ping/pong from server...");
+                    }
+                }
             }
         }
 

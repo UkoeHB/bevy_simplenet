@@ -7,13 +7,25 @@ use std::time::{Duration, Instant};
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Configuration for rate limiter. 10 messages per 100 millisconds by default.
 #[derive(Debug, Copy, Clone)]
 pub struct RateLimitConfig
 {
-    /// Length of time to count messages.
+    /// Length of time to count messages. 100 milliseconds by default.
     pub period: Duration,
-    /// Max number of messages that may appear in a collection period.
+    /// Max number of messages that may appear in a collection period. 10 messages by default.
     pub max_count: u32
+}
+
+impl Default for RateLimitConfig
+{
+    fn default() -> RateLimitConfig
+    {
+        RateLimitConfig{
+                period    : Duration::from_millis(100u64),
+                max_count : 10u32,
+            }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------

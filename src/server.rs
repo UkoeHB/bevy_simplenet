@@ -33,16 +33,10 @@ fn socket_config(prevalidator: &ConnectionPrevalidator, client_env_type: EnvType
         {
             // use a custom Text-based ping message
             ezsockets::SocketConfig{
-                heartbeat : prevalidator.heartbeat_interval,
-                timeout   : prevalidator.keepalive_timeout,
-                heartbeat_ping_msg_fn : Arc::new(
-                        |timestamp: std::time::Duration|
-                        {
-                            let timestamp = timestamp.as_millis();
-                            ezsockets::RawMessage::Text(timestamp.to_string())
-                        }
-                    )
-            }
+                    heartbeat : prevalidator.heartbeat_interval,
+                    timeout   : prevalidator.keepalive_timeout,
+                    heartbeat_ping_msg_fn : Arc::new(text_ping_fn)
+                }
         }
     }
 }

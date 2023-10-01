@@ -97,6 +97,7 @@ where
                             session,
                             client_msg_sender,
                             max_msg_size,
+                            client_env_type: info.client_env_type,
                             rate_limit_tracker: RateLimitTracker::new(rate_limit_config)
                         }
                 },

@@ -25,9 +25,11 @@ where
 
     /// config: maximum message size (bytes)
     pub(crate) max_msg_size: u32,
+    /// client's environment type
+    pub(crate) client_env_type: EnvType,
 
     /// rate limit tracker
-    pub(crate) rate_limit_tracker: RateLimitTracker
+    pub(crate) rate_limit_tracker: RateLimitTracker,
 }
 
 #[async_trait::async_trait]
@@ -44,11 +46,57 @@ where
     }
 
     // Receive text from client (via session connection).
-    async fn on_text(&mut self, _text: String) -> Result<(), ezsockets::Error>
+    async fn on_text(&mut self, text: String) -> Result<(), ezsockets::Error>
     {
-        // reject text from client
-        tracing::trace!("received text from client (not implemented), closing session...");
-        self.close("text not allowed").await; return Ok(());
+        match self.client_env_type
+        {
+            EnvType::Native =>
+            {
+                // reject text from client
+                tracing::trace!("received text from native client (not implemented), closing session...");
+                self.close("text not allowed").await; return Ok(());
+            }
+            EnvType::Wasm =>
+            {
+                // received Ping or Pong
+                let Some((var, value)) = text.as_str().split_once(':')
+                else
+                {
+                    tracing::trace!("received invalid text from WASM client, closing session...");
+                    self.close("only ping/pong text allowed").await; return Ok(());
+                };
+
+                // try to deserialize timestamp
+                let Ok(timestamp) = u128::from_str_radix(value, 10u32)
+                else
+                {
+                    tracing::trace!("received invalid ping/pong timestamp from WASM client, closing session...");
+                    self.close("only timestamp ping/pong allowed").await; return Ok(());
+                };
+
+                match var
+                {
+                    "ping" =>
+                    {
+                        // received Ping, send Pong back
+                        tracing::info!(?value, "client ping");
+                        let _ = self.session.text(format!("pong:{}", value))?;
+                    }
+                    "pong" =>
+                    {
+                        // received Pong, log latency
+                        log_ping_pong_latency(timestamp);
+                    }
+                    _ =>
+                    {
+                        tracing::trace!("received invalid ping/pong timestamp from WASM client, closing session...");
+                        self.close("only ping/pong prefixes allowed").await;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // Receive binary from client (via session connection).

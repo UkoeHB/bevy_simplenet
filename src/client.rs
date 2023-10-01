@@ -214,6 +214,17 @@ where
             .query_parameter(AUTH_MSG_KEY, auth_msg_ser.as_str())
             .query_parameter(CONNECT_MSG_KEY, connect_msg_ser.as_str());
 
+        // prepare client's socket config
+        let mut socket_config = ezsockets::SocketConfig::default();
+        socket_config.heartbeat = config.heartbeat_interval;
+        socket_config.timeout   = config.keepalive_timeout;
+
+        // on WASM we need custom Ping/Pong protocol
+        #[cfg(wasm)]
+        { socket_config.heartbeat_ping_msg_fn = Arc::new(text_ping_fn); }
+
+        let client_config = client_config.socket_config(socket_config);
+
         // prepare message channels that point out of our client
         let (
                 connection_report_sender,

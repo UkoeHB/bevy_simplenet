@@ -262,6 +262,7 @@ pub(crate) fn prevalidate_connection_request(
 #[derive(Debug)]
 pub(crate) struct ConnectionInfo<ConnectMsg>
 {
+    pub(crate) client_env_type : EnvType,
     pub(crate) id              : u128,
     pub(crate) connect_msg     : ConnectMsg,
 }
@@ -286,7 +287,7 @@ where
     query_elements_iterator.next();
 
     // get client's implementation type
-    let _client_env_type = try_extract_client_env(query_elements_iterator.next()).map_err(|_| None)?;
+    let client_env_type = try_extract_client_env(query_elements_iterator.next()).map_err(|_| None)?;
 
     // try to get client id
     let id = try_extract_client_id(query_elements_iterator.next()).map_err(|_| None)?;
@@ -312,6 +313,7 @@ where
         )?;
 
     Ok(ConnectionInfo{
+            client_env_type,
             id,
             connect_msg,
         })
