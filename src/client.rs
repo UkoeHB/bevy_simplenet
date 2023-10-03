@@ -209,6 +209,8 @@ where
 
         let client_config = ezsockets::ClientConfig::new(url)
             .reconnect_interval(config.reconnect_interval)
+            .max_initial_connect_attempts(config.max_initial_connect_attempts)
+            .max_reconnect_attempts(config.max_reconnect_attempts)
             .query_parameter(VERSION_MSG_KEY, self.protocol_version)
             .query_parameter(TYPE_MSG_KEY, env_type_as_str(env_type()))
             .query_parameter(AUTH_MSG_KEY, auth_msg_ser.as_str())
@@ -219,9 +221,11 @@ where
         socket_config.heartbeat = config.heartbeat_interval;
         socket_config.timeout   = config.keepalive_timeout;
 
-        // on WASM we need custom Ping/Pong protocol
         #[cfg(wasm)]
-        { socket_config.heartbeat_ping_msg_fn = Arc::new(text_ping_fn); }
+        {
+            // on WASM we need custom Ping/Pong protocol
+            socket_config.heartbeat_ping_msg_fn = Arc::new(text_ping_fn);
+        }
 
         let client_config = client_config.socket_config(socket_config);
 

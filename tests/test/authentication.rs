@@ -66,7 +66,10 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             client_runtime,
             websocket_server.url(),
             auth_request,
-            bevy_simplenet::ClientConfig::default(),
+            bevy_simplenet::ClientConfig{
+                max_initial_connect_attempts: 1usize,
+                ..Default::default()
+            },
             DemoConnectMsg(String::from("hello"))
         )).unwrap();
 

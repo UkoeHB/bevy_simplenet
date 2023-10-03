@@ -41,7 +41,7 @@ tokio       = { version = "1.29", optional = true }
 
 [dependencies.ezsockets]
 git              = "https://github.com/gbaranski/ezsockets.git"
-rev              = "99d07bd"
+rev              = "0cc591e"
 default-features = false
 
 [dev-dependencies]

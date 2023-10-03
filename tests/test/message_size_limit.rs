@@ -78,7 +78,10 @@ fn message_size_limit_test(max_msg_size: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 67891u128 },
-            bevy_simplenet::ClientConfig::default(),
+            bevy_simplenet::ClientConfig{
+                max_initial_connect_attempts: 1usize,
+                ..Default::default()
+            },
             large_connect_msg
         )).unwrap();
 

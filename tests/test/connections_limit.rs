@@ -101,7 +101,10 @@ fn connections_limit_test(max_connections: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 92748u128 },
-            bevy_simplenet::ClientConfig::default(),
+            bevy_simplenet::ClientConfig{
+                max_initial_connect_attempts: 1usize,
+                ..Default::default()
+            },
             connect_msg.clone()
         )).unwrap();
 
@@ -155,7 +158,10 @@ fn connections_limit_test(max_connections: u32)
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 15364898u128 },
-            bevy_simplenet::ClientConfig::default(),
+            bevy_simplenet::ClientConfig{
+                max_initial_connect_attempts: 1usize,
+                ..Default::default()
+            },
             connect_msg.clone()
         )).unwrap();
 

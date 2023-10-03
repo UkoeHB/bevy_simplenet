@@ -35,15 +35,15 @@ pub enum ServerReport<ConnectMsg: Debug + Clone>
 #[derive(Debug, Copy, Clone)]
 pub struct ServerConfig
 {
-    /// Max number of concurrent client connections. 100K by default.
+    /// Max number of concurrent client connections. Defaults to 100K.
     pub max_connections: u32,
-    /// Max message size allowed from clients (bytes). 1MB by default.
+    /// Max message size allowed from clients (bytes). Defaults to 1MB.
     pub max_msg_size: u32,
     /// Rate limit for messages received from a session. See [`RateLimitConfig`] for defaults.
     pub rate_limit_config: RateLimitConfig,
-    /// Duration between socket heartbeat pings if the connection is inactive. 5 seconds by default.
+    /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
     pub heartbeat_interval: Duration,
-    /// Duration after which a socket will shut down if the connection is inactive. 10 seconds by default.
+    /// Duration after which a socket will shut down if the connection is inactive. Defaults to 10 seconds.
     pub keepalive_timeout: Duration,
 }
 
@@ -80,15 +80,19 @@ pub enum ClientReport
 #[derive(Debug)]
 pub struct ClientConfig
 {
-    /// Try to reconnect if the client is disconnected. `true` by default.
+    /// Try to reconnect if the client is disconnected. Defaults to `true`.
     pub reconnect_on_disconnect: bool,
-    /// Try to reconnect if the client is closed by the server. `false` by default.
+    /// Try to reconnect if the client is closed by the server. Defaults to `false`.
     pub reconnect_on_server_close: bool,
-    /// Reconnect interval (delay between reconnect attempts). 2 seconds by default.
+    /// Reconnect interval (delay between reconnect attempts). Defaults to 2 seconds.
     pub reconnect_interval: Duration,
-    /// Duration between socket heartbeat pings if the connection is inactive. 5 seconds by default.
+    /// Maximum number of connection attempts when initially connecting. Defaults to infinite.
+    pub max_initial_connect_attempts: usize,
+    /// Maximum number of reconnect attempts when reconnecting. Defaults to infinite.
+    pub max_reconnect_attempts: usize,
+    /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
     pub heartbeat_interval: Duration,
-    /// Duration after which a socket will shut down if the connection is inactive. 10 seconds by default
+    /// Duration after which a socket will shut down if the connection is inactive. Defaults to 10 seconds
     pub keepalive_timeout: Duration,
 }
 
@@ -97,11 +101,13 @@ impl Default for ClientConfig
     fn default() -> ClientConfig
     {
         ClientConfig{
-                reconnect_on_disconnect   : true,
-                reconnect_on_server_close : false,
-                reconnect_interval        : Duration::from_secs(2),
-                heartbeat_interval        : Duration::from_secs(5),
-                keepalive_timeout         : Duration::from_secs(10),
+                reconnect_on_disconnect      : true,
+                reconnect_on_server_close    : false,
+                reconnect_interval           : Duration::from_secs(2),
+                max_initial_connect_attempts : usize::MAX,
+                max_reconnect_attempts       : usize::MAX,
+                heartbeat_interval           : Duration::from_secs(5),
+                keepalive_timeout            : Duration::from_secs(10),
             }
     }
 }
