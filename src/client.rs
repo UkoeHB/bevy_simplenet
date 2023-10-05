@@ -3,12 +3,64 @@ use crate::*;
 
 //third-party shortcuts
 use bincode::Options;
-use enfync::{AdoptOrDefault, HandleTrait};
+use enfync::Handle;
 use serde::{Serialize, Deserialize};
 
 //standard shortcuts
 use core::fmt::Debug;
 use std::marker::PhantomData;
+use std::time::Duration;
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Config controlling how clients respond to connection events
+#[derive(Debug)]
+pub struct ClientConfig
+{
+    /// Try to reconnect if the client is disconnected. Defaults to `true`.
+    pub reconnect_on_disconnect: bool,
+    /// Try to reconnect if the client is closed by the server. Defaults to `false`.
+    pub reconnect_on_server_close: bool,
+    /// Reconnect interval (delay between reconnect attempts). Defaults to 2 seconds.
+    pub reconnect_interval: Duration,
+    /// Maximum number of connection attempts when initially connecting. Defaults to infinite.
+    pub max_initial_connect_attempts: usize,
+    /// Maximum number of reconnect attempts when reconnecting. Defaults to infinite.
+    pub max_reconnect_attempts: usize,
+    /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
+    pub heartbeat_interval: Duration,
+    /// Duration after which a socket will shut down if the connection is inactive. Defaults to 10 seconds
+    pub keepalive_timeout: Duration,
+}
+
+impl Default for ClientConfig
+{
+    fn default() -> ClientConfig
+    {
+        ClientConfig{
+                reconnect_on_disconnect      : true,
+                reconnect_on_server_close    : false,
+                reconnect_interval           : Duration::from_secs(2),
+                max_initial_connect_attempts : usize::MAX,
+                max_reconnect_attempts       : usize::MAX,
+                heartbeat_interval           : Duration::from_secs(5),
+                keepalive_timeout            : Duration::from_secs(10),
+            }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Emitted by clients when they connect/disconnect/shut down.
+#[derive(Debug, Clone)]
+pub enum ClientReport
+{
+    Connected,
+    Disconnected,
+    ClosedByServer(Option<ezsockets::CloseFrame>),
+    ClosedBySelf,
+    IsDead,
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -169,42 +221,16 @@ where
     }
 
     /// New client.
-    //todo: return client directly instead of pending result (need non-async ezsockets connect)
     pub fn new_client(&self,
         runtime_handle : enfync::builtin::Handle,
         url            : url::Url,
         auth           : AuthRequest,
         config         : ClientConfig,
         connect_msg    : ConnectMsg,
-    ) -> enfync::PendingResult<Client<ServerMsg, ClientMsg, ConnectMsg>>
-    {
-        tracing::info!("new client pending");
-        let factory_clone = self.clone();
-        runtime_handle.spawn(
-                async move {
-                    factory_clone.new_client_async(
-                            url,
-                            auth,
-                            config,
-                            connect_msg,
-                        ).await
-                }
-            )
-    }
-
-    /// New client (async).
-    pub async fn new_client_async(&self,
-        url           : url::Url,
-        auth          : AuthRequest,
-        config        : ClientConfig,
-        connect_msg   : ConnectMsg,
     ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
     {
-        #[cfg(wasm)]
-        { panic!("bevy simplenet clients not supported (yet) on WASM!"); }
-
         // prepare to make client connection
-        // note: http headers cannot contain raw bytes so we must serialize as json
+        // note: urls cannot contain raw bytes so we must serialize as json
         let auth_msg_ser    = serde_json::to_string(&auth).expect("could not serialize authentication");
         let connect_msg_ser = serde_json::to_string(&connect_msg).expect("could not serialize connect msg");
 
@@ -237,9 +263,18 @@ where
             ) = crossbeam::channel::unbounded::<ClientReport>();
         let (server_msg_sender, server_msg_receiver) = crossbeam::channel::unbounded::<ServerMsg>();
 
+        // prepare client connector
+        let client_connector = {
+                #[cfg(not(target_family = "wasm"))]
+                { ezsockets::ClientConnectorTokio::from(runtime_handle.clone()) }
+
+                #[cfg(target_family = "wasm")]
+                { ezsockets::ClientConnectorWasm::default() }
+            };
+
         // make client core with our handler
         let connection_report_sender_clone = connection_report_sender.clone();
-        let (client, client_handler_worker) = ezsockets::connect(
+        let (client, mut client_task_handle) = ezsockets::connect_with(
                 move |client|
                 {
                     ClientHandler::<ServerMsg>{
@@ -249,13 +284,17 @@ where
                             server_msg_sender
                         }
                 },
-                client_config
-            ).await;
+                client_config,
+                client_connector,
+            );
 
         // track client closure
-        let client_closed_signal = enfync::builtin::Handle::adopt_or_default().spawn(
+        let client_closed_signal = runtime_handle.spawn(
                 async move {
-                    if let Err(err) = client_handler_worker.await
+                    if let Err(err) = client_task_handle
+                        .extract()
+                        .await
+                        .unwrap_or(Err(ezsockets::Error::from("client task crashed")))
                     {
                         tracing::error!(err, "client closed with error");
                     }
@@ -263,6 +302,8 @@ where
             );
 
         // finish assembling our client
+        tracing::info!("created new client");
+
         Client{
                 client_id: auth.client_id(),
                 client,

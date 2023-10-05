@@ -68,10 +68,7 @@ where
                         // received Pong, log latency
                         log_ping_pong_latency(timestamp);
                     }
-                    _ =>
-                    {
-                        tracing::warn!("ignoring invalid ping/pong from server...");
-                    }
+                    _ => tracing::warn!("ignoring invalid ping/pong from server...")
                 }
             }
         }
@@ -103,6 +100,7 @@ where
     }
 
     /// Call from associated client.
+    ///
     /// Does nothing.
     async fn on_call(&mut self, _msg: ()) -> Result<(), ezsockets::Error>
     {

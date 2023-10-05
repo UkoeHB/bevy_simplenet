@@ -62,7 +62,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
         );
 
     // make client
-    let websocket_client = enfync::blocking::extract(client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime,
             websocket_server.url(),
             auth_request,
@@ -71,7 +71,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
                 ..Default::default()
             },
             DemoConnectMsg(String::from("hello"))
-        )).unwrap();
+        );
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

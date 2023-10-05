@@ -11,6 +11,43 @@ use std::collections::HashMap;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
+pub(crate) struct SessionTargetMsg<I: Debug + Clone, T: Debug + Clone>
+{
+    pub(crate) id  : I,
+    pub(crate) msg : T
+}
+
+impl<I: Debug + Clone, T: Debug + Clone> SessionTargetMsg<I, T>
+{
+    pub(crate) fn new(id: I, msg: T) -> SessionTargetMsg<I, T> { SessionTargetMsg::<I, T> { id, msg } }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub(crate) struct SessionSourceMsg<I: Debug + Clone, T: Debug + Clone>
+{
+    pub(crate) id  : I,
+    pub(crate) msg : T
+}
+
+impl<I: Debug + Clone, T: Debug + Clone> SessionSourceMsg<I, T>
+{
+    pub(crate) fn new(id: I, msg: T) -> SessionSourceMsg<I, T> { SessionSourceMsg::<I, T> { id, msg } }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub(crate) enum SessionCommand<ServerMsg: Debug + Clone>
+{
+    SendMsg(ServerMsg),
+    Close(ezsockets::CloseFrame)
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 //todo: shut down procedure (implementation currently assumes the server lives until the executable closes)
 #[derive(Debug)]
 pub(crate) struct ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>

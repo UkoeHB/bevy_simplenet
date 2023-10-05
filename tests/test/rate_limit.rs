@@ -66,13 +66,13 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // make client
     let connect_msg = DemoConnectMsg(String::from("hello!"));
-    let websocket_client = enfync::blocking::extract(client_demo_factory().new_client(
+    let websocket_client = client_demo_factory().new_client(
             client_runtime,
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },
             bevy_simplenet::ClientConfig::default(),
             connect_msg.clone()
-        )).unwrap();
+        );
     assert!(!websocket_client.is_dead());
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

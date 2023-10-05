@@ -1,6 +1,6 @@
-# Bevy SimpleNet {INITIAL RELEASE IS WIP}
+# Bevy Simplenet {INITIAL RELEASE IS WIP}
 
-Provides a bi-directional server/client channel implemented over websockets that can be stored in bevy resources: `Res<Client>`, `Res<Server`. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
+Provides a bi-directional server/client channel implemented over websockets. Clients automatically work on native and WASM targets. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
 
 **Warning**: This crate requires nightly rust (see open TODOs).
 
@@ -9,15 +9,22 @@ Provides a bi-directional server/client channel implemented over websockets that
 
 - `default`: `bevy`, `client`, `server`
 - `bevy`: derives `Resource` on `Client` and `Server`
-- `client`: enables simplenet clients
-- `server`: enables simplenet servers
+- `client`: enables simplenet clients (native and WASM targets)
+- `server`: enables simplenet servers (native-only targets)
 - `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
 - `tls-openssl`: enables TLS for servers via [`OpenSSL`](https://crates.io/crates/openssl)
 
 
+
+## WASM
+
+On WASM targets the client backend will not update while any other tasks are running. You must either build an IO-oriented application which naturally spends a lot of time polling tasks, or manually release the main thread periodically (e.g. with `web_sys::Window::set_timeout_with_callback_and_timeout_and_arguments_0()`). For Bevy apps the latter happens automatically at the end of every app update/tick (see the `bevy::app::ScheduleRunnerPlugin` [implementation](https://github.com/bevyengine/bevy)).
+
+
+
 ## Usage notes
 
-- Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets` (TODO: WASM client backend).
+- Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets`.
 - A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
 - Server session ids equal client ids. Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client auth request will have the same session id. Connections will be rejected if an id is already connected.
 - Connect messages will be cloned for all reconnect attempts by clients, so they should be treated as static data.
@@ -32,6 +39,8 @@ Provides a bi-directional server/client channel implemented over websockets that
 // path shortcuts
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 
 
 // define a channel
@@ -76,30 +85,25 @@ let server = server_factory().new_server(
         "127.0.0.1:0",
         bevy_simplenet::AcceptorConfig::Default,
         bevy_simplenet::Authenticator::None,
-        bevy_simplenet::ServerConfig{
-            max_connections   : 10,
-            max_msg_size      : 10_000,
-            rate_limit_config : bevy_simplenet::RateLimitConfig{
-                    period    : std::time::Duration::from_millis(15),
-                    max_count : 25
-                },
-            heartbeat_interval : std::time::Duration::from_secs(5),
-            keepalive_timeout  : std::time::Duration::from_secs(10),
-        }
+        bevy_simplenet::ServerConfig::default(),
     );
 assert_eq!(server.num_connections(), 0u64);
 
 
+// sleep duration for async machinery
+let sleep_duration = Duration::from_millis(15);
+
+
 // make a client
 let client_id = 0u128;
-let client = enfync::blocking::extract(client_factory().new_client(
-        enfync::builtin::Handle::default(),
+let client = client_factory().new_client(
+        enfync::builtin::Handle::default(),  //automatically selects native/WASM runtime
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConfig::default(),
         ConnectMsg(String::from("hello"))
-    )).unwrap();
-std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+    );
+sleep(sleep_duration);
 assert_eq!(server.num_connections(), 1u64);
 
 
@@ -114,7 +118,7 @@ assert_eq!(connect_msg.0, String::from("hello"));
 // send message: client -> server
 let signal = client.send(&ClientMsg(42)).unwrap();
 assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
-std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+sleep(sleep_duration);
 assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
 
 
@@ -126,7 +130,7 @@ assert_eq!(msg_client_val, 42);
 
 // send message: server -> client
 server.send(client_id, ServerMsg(24)).unwrap();
-std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+sleep(sleep_duration);
 
 
 // read message from server
@@ -136,7 +140,7 @@ assert_eq!(msg_server_val, 24);
 
 // client closes itself
 client.close();
-std::thread::sleep(std::time::Duration::from_millis(15));  //wait for async machinery
+sleep(sleep_duration);
 assert_eq!(server.num_connections(), 0u64);
 
 
@@ -145,6 +149,8 @@ let bevy_simplenet::ServerReport::Disconnected(client_id) = server.next_report()
 else { panic!("client not disconnected"); };
 let bevy_simplenet::ClientReport::ClosedBySelf = client.next_report().unwrap()
 else { panic!("client not closed by self"); };
+let bevy_simplenet::ClientReport::IsDead = client.next_report().unwrap()
+else { panic!("client not dead"); };
 ```
 
 
@@ -156,8 +162,7 @@ else { panic!("client not closed by self"); };
     - auth key signs { client id, token expiry }
     - client key signs { auth signature }
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
-- Add WASM-compatible client backend (see [this crate](https://github.com/workflow-rs/workflow-rs) or [this crate](https://docs.rs/ws_stream_wasm/latest/ws_stream_wasm/)).
-- Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `Server::send()` method.
+- Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `bevy_simplenet::Server::send()` method.
 
 
 
