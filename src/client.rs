@@ -136,6 +136,7 @@ where
 {
     fn drop(&mut self)
     {
+        if self.is_dead() { return; }
         self.close();
     }
 }
