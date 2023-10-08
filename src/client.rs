@@ -103,7 +103,7 @@ where
     /// Returns `Ok(ezsockets::MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is dead (calls to [`is_dead()`] may return false for a short time
+    /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
     /// after this returns `Err`).
     pub fn send(&self, msg: &ClientMsg) -> Result<ezsockets::MessageSignal, ()>
     {
@@ -147,13 +147,19 @@ where
     }
 
     /// Test if client is dead (no longer connected to server and won't reconnect).
-    /// - Note that a `ClientReport::IsDead` will be emitted by `Client::next_report()` when the client's internal actor dies.
+    /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next_report()`] when the client's internal actor
+    ///   dies.
     pub fn is_dead(&self) -> bool
     {
         self.client_closed_signal.done()
     }
 
     /// Close the client.
+    ///
+    /// Any in-progress messages may or may not fail once this method is called. Messages sent after this method is called
+    /// will fail. TODO: wait until the send status of the
+    /// last-sent message is finalized before fully closing the client, start returning errors on `send()` as
+    /// soon as `close()` is called.
     pub fn close(&self)
     {
         // sanity check

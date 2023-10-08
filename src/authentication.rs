@@ -82,6 +82,11 @@ pub enum AuthRequest
     {
         client_id: u128
     },
+    /// **WARNING**
+    ///
+    /// Client connection requests paste the auth request into the request URL, which means secrets won't be encrypted.
+    /// You should only use this auth type in controlled environments or if you are not concerned about secrets being
+    /// intercepted.
     Secret
     {
         client_id: u128,

@@ -192,7 +192,7 @@ where
     }
 
     /// Close the target session.
-    /// note: the target session may not be closed until some time after this method is called
+    /// note: the target session may remain open until some time after this method is called
     pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
