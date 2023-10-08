@@ -1,0 +1,8 @@
+[package]
+name = "bevy_simplenet-common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy_simplenet = { path = "../../", default_features = false }
+serde          = { version = "1.0" }

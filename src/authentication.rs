@@ -114,7 +114,7 @@ impl AuthRequest
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) fn authenticate(request: &AuthRequest, authenticator: &Authenticator) -> bool
+pub fn authenticate(request: &AuthRequest, authenticator: &Authenticator) -> bool
 {
     match authenticator
     {

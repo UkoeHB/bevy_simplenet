@@ -9,13 +9,11 @@
 cfg_if::cfg_if! { if #[cfg(any(feature = "client", feature = "server"))] {
     mod authentication;
     mod common;
-    mod errors;
     mod rate_limiter;
     mod text_ping_pong;
 
     pub use crate::authentication::*;
     pub use crate::common::*;
-    pub(crate) use crate::errors::*;
     pub use crate::rate_limiter::*;
     pub(crate) use crate::text_ping_pong::*;
 }}

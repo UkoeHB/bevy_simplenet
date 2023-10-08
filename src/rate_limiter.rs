@@ -34,7 +34,7 @@ impl Default for RateLimitConfig
 /// - If messages appear, on average, more frequently than count/period, then [`RateLimitTracker::try_count_msg()`]
 ///   will fail.
 #[derive(Debug)]
-pub(crate) struct RateLimitTracker
+pub struct RateLimitTracker
 {
     /// rate limit configuration
     config: RateLimitConfig,
@@ -49,7 +49,7 @@ pub(crate) struct RateLimitTracker
 
 impl RateLimitTracker
 {
-    pub(crate) fn new(config: RateLimitConfig) -> RateLimitTracker
+    pub fn new(config: RateLimitConfig) -> RateLimitTracker
     {
         let next_checkpoint_time = config.period;
         RateLimitTracker{
@@ -60,7 +60,7 @@ impl RateLimitTracker
             }
     }
 
-    pub(crate) fn try_count_msg(&mut self) -> bool
+    pub fn try_count_msg(&mut self) -> bool
     {
         // check if we are in a new period
         let msg_time = self.timer.elapsed();

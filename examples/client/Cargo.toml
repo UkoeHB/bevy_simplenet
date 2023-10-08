@@ -1,0 +1,13 @@
+[package]
+name = "bevy_simplenet-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy                  = { version = "0.11" }
+bevy_kot              = { version = "0.0.5" }
+bevy_lunex            = { version = "0.0.6" }
+bevy_simplenet        = { path = "../../", default_features = false, features = [ "client", "bevy" ] }
+bevy_simplenet-common = { path = "../common/" }
+enfync                = { version = "0.1" }
+url                   = { version = "2.4" }

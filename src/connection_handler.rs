@@ -11,6 +11,28 @@ use std::collections::HashMap;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Errors emitted by `ConnectionHandler`
+#[derive(Debug, Clone)]
+pub enum ConnectionError
+{
+    SystemError,
+}
+
+impl std::fmt::Display for ConnectionError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        let _ = write!(f, "ConnectionError::");
+        match self
+        {
+            ConnectionError::SystemError => write!(f, "SystemError"),
+        }
+    }
+}
+impl std::error::Error for ConnectionError {}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug)]
 pub(crate) struct SessionTargetMsg<I: Debug + Clone, T: Debug + Clone>
 {

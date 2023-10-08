@@ -20,13 +20,13 @@ pub(crate) const CONNECT_MSG_KEY : &'static str = "c";
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum EnvType
+pub enum EnvType
 {
     Native,
     Wasm,
 }
 
-pub(crate) fn env_type() -> EnvType
+pub fn env_type() -> EnvType
 {
     #[cfg(not(target_family = "wasm"))]
     { EnvType::Native }
@@ -35,7 +35,7 @@ pub(crate) fn env_type() -> EnvType
     { EnvType::Wasm }
 }
 
-pub(crate) fn env_type_as_str(env_type: EnvType) -> &'static str
+pub fn env_type_as_str(env_type: EnvType) -> &'static str
 {
     match env_type
     {
@@ -44,7 +44,7 @@ pub(crate) fn env_type_as_str(env_type: EnvType) -> &'static str
     }
 }
 
-pub(crate) fn env_type_from_str(env_type: &str) -> Option<EnvType>
+pub fn env_type_from_str(env_type: &str) -> Option<EnvType>
 {
     match env_type
     {

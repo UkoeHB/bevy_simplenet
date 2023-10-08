@@ -54,19 +54,19 @@ bevy_ecs    = { version = "0.11", optional = true }
 tokio       = { version = "1.29", optional = true }
 
 [dependencies.ezsockets]
-git              = "https://github.com/gbaranski/ezsockets.git"
-rev              = "9b92208"
+git              = "https://github.com/UkoeHB/ezsockets.git"
+rev              = "c5da78d"
 default-features = false
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
-git              = "https://github.com/gbaranski/ezsockets.git"
-rev              = "9b92208"
+git              = "https://github.com/UkoeHB/ezsockets.git"
+rev              = "c5da78d"
 default-features = false
 features         = [ "native_client" ]  #todo: how to configure target on 'client' feature
 
 [target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
-git              = "https://github.com/gbaranski/ezsockets.git"
-rev              = "9b92208"
+git              = "https://github.com/UkoeHB/ezsockets.git"
+rev              = "c5da78d"
 default-features = false
 features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature
 
@@ -76,5 +76,6 @@ tracing-subscriber = { version = "0.3" }
 [workspace]
 members = [
     "examples/client",
+    "examples/common",
     "examples/server",
 ]
