@@ -4,7 +4,6 @@ use crate::*;
 //third-party shortcuts
 use axum::response::IntoResponse;
 use enfync::Handle;
-use serde::{Serialize, Deserialize};
 
 //standard shortcuts
 use core::fmt::Debug;
@@ -45,16 +44,12 @@ fn socket_config(prevalidator: &ConnectionPrevalidator, client_env_type: EnvType
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-async fn websocket_handler<ServerMsg, ClientMsg, ConnectMsg>(
-    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<ServerMsg, ClientMsg, ConnectMsg>>>,
+async fn websocket_handler<Msgs: MsgPack>(
+    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<Msgs>>>,
     axum::Extension(count)  : axum::Extension<ConnectionCounter>,
     axum::Extension(preval) : axum::Extension<Arc<ConnectionPrevalidator>>,
     ezsocket_upgrade        : ezsockets::axum::Upgrade,
 ) -> impl axum::response::IntoResponse
-where
-    ServerMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
 {
     // prevalidate then prepare upgrade
     match prevalidate_connection_request(ezsocket_upgrade.request(), &count, &preval)
@@ -136,11 +131,7 @@ pub enum ServerReport<ConnectMsg: Debug + Clone>
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
-pub struct Server<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + Serialize,
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+pub struct Server<Msgs: MsgPack>
 {
     /// the server's address
     server_address: SocketAddr,
@@ -150,11 +141,13 @@ where
     connection_counter: ConnectionCounter,
 
     /// sends messages to the internal connection handler
-    server_msg_sender: tokio::sync::mpsc::UnboundedSender<SessionTargetMsg<SessionID, SessionCommand<ServerMsg>>>,
+    server_val_sender: tokio::sync::mpsc::UnboundedSender<
+        SessionTargetMsg<SessionID, SessionCommandFromPack<Msgs>>
+    >,
     /// receives reports from the internal connection handler
-    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<ConnectMsg>>,
+    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<Msgs::ConnectMsg>>,
     /// receives client messages from the internal connection handler
-    client_msg_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientMsg>>,
+    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientValFromPack<Msgs>>>,
 
     /// signal indicates if server internal worker has stopped
     server_closed_signal: enfync::PendingResult<()>,
@@ -162,19 +155,12 @@ where
     server_running_signal: enfync::PendingResult<()>,
 }
 
-impl<ServerMsg, ClientMsg, ConnectMsg> Server<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+impl<Msgs: MsgPack> Server<Msgs>
 {
-    /// Associated factory type.
-    pub type Factory = ServerFactory<ServerMsg, ClientMsg, ConnectMsg>;
-
     /// Send a message to the target session.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
-    pub fn send(&self, id: SessionID, msg: ServerMsg) -> Result<(), ()>
+    pub fn send(&self, id: SessionID, msg: Msgs::ServerMsg) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if self.is_dead()
@@ -182,7 +168,9 @@ where
             tracing::warn!(id, "tried to send message to session but server is dead");
             return Err(());
         }
-        if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::SendMsg(msg)))
+        if let Err(err) = self.server_val_sender.send(
+                SessionTargetMsg::new(id, SessionCommandFromPack::<Msgs>::Send(ServerValFromPack::<Msgs>::Msg(msg)))
+            )
         {
             tracing::error!(?err, "failed to forward session message to session");
             return Err(());
@@ -190,6 +178,12 @@ where
 
         Ok(())
     }
+
+    //todo: respond
+
+    //todo: acknowledge
+
+    //todo: reject request
 
     /// Close the target session.
     ///
@@ -203,7 +197,9 @@ where
             tracing::warn!(id, "tried to close session but server is dead");
             return Err(());
         }
-        if let Err(err) = self.server_msg_sender.send(SessionTargetMsg::new(id, SessionCommand::Close(close_frame)))
+        if let Err(err) = self.server_val_sender.send(
+                SessionTargetMsg::new(id, SessionCommandFromPack::<Msgs>::Close(close_frame))
+            )
         {
             tracing::error!(?err, "failed to forward session close command to session");
             return Err(());
@@ -213,17 +209,17 @@ where
     }
 
     /// Try to get the next available connection report.
-    pub fn next_report(&self) -> Option<ServerReport<ConnectMsg>>
+    pub fn next_report(&self) -> Option<ServerReport<Msgs::ConnectMsg>>
     {
         //todo: count connections
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
         Some(msg)
     }
 
-    /// Try to extract the next available message from a client.
-    pub fn next_msg(&self) -> Option<(SessionID, ClientMsg)>
+    /// Try to extract the next available value from a client.
+    pub fn next_val(&self) -> Option<(SessionID, ClientValFromPack<Msgs>)>
     {
-        let Ok(msg) = self.client_msg_receiver.try_recv() else { return None; };
+        let Ok(msg) = self.client_val_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
     }
 
@@ -263,21 +259,13 @@ pub enum AcceptorConfig
 /// Factory for producing servers that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
-pub struct ServerFactory<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + Serialize,
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+pub struct ServerFactory<Msgs: MsgPack>
 {
     protocol_version : &'static str,
-    _phantom         : PhantomData<(ServerMsg, ClientMsg, ConnectMsg)>,
+    _phantom         : PhantomData<Msgs>,
 }
 
-impl<ServerMsg, ClientMsg, ConnectMsg> ServerFactory<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
+impl<Msgs: MsgPack> ServerFactory<Msgs>
 {
     /// Make a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
@@ -294,7 +282,7 @@ where
         acceptor_config : AcceptorConfig,
         authenticator   : Authenticator,
         config          : ServerConfig
-    ) -> Server<ServerMsg, ClientMsg, ConnectMsg>
+    ) -> Server<Msgs>
     where
         A: std::net::ToSocketAddrs + Send + 'static,
     {
@@ -305,11 +293,11 @@ where
         let (
                 connection_report_sender,
                 connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ServerReport<ConnectMsg>>();
+            ) = crossbeam::channel::unbounded::<ServerReport<Msgs::ConnectMsg>>();
         let (
-                client_msg_sender,
-                client_msg_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientMsg>>();
+                client_val_sender,
+                client_val_receiver
+            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientValFromPack<Msgs>>>();
 
         // prepare connection counter
         // - this is used to communication the current number of connections from the connection handler to the
@@ -323,13 +311,12 @@ where
         let (server, server_worker) = enfync::blocking::extract(runtime_handle.spawn(async move {
                 ezsockets::Server::create(
                         move |_server|
-                        ConnectionHandler::<ServerMsg, ClientMsg, ConnectMsg>{
+                        ConnectionHandler::<Msgs>{
                                 config,
                                 connection_counter: connection_counter_clone,
                                 connection_report_sender,
                                 session_registry: HashMap::default(),
-                                client_msg_sender,
-                                _phantom: std::marker::PhantomData::default()
+                                client_val_sender,
                             }
                     )
             })).unwrap();
@@ -355,7 +342,7 @@ where
 
         // prepare router
         let app = axum::Router::new()
-            .route("/ws", axum::routing::get(websocket_handler::<ServerMsg, ClientMsg, ConnectMsg>))
+            .route("/ws", axum::routing::get(websocket_handler::<Msgs>))
             .layer(axum::Extension(server.clone()))
             .layer(axum::Extension(Arc::new(prevalidator)))
             .layer(axum::Extension(connection_counter.clone()));
@@ -376,9 +363,9 @@ where
                 server_address,
                 uses_tls,
                 connection_counter,
-                server_msg_sender: server.into(),  //extract the call sender
+                server_val_sender: server.into(),  //extract the call sender
                 connection_report_receiver,
-                client_msg_receiver,
+                client_val_receiver,
                 server_closed_signal,
                 server_running_signal,
             }

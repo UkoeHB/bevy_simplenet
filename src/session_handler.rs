@@ -11,17 +11,27 @@ use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+pub(crate) type SessionHandlerFromPack<Msgs> = SessionHandler<
+        <Msgs as MsgPack>::ClientMsg,
+        <Msgs as MsgPack>::ClientRequest,
+    >;
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug)]
-pub(crate) struct SessionHandler<ClientMsg>
+pub(crate) struct SessionHandler<ClientMsg, ClientRequest>
 where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     /// id of this session
     pub(crate) id: SessionID,
     /// this session
     pub(crate) session: ezsockets::Session<SessionID, ()>,
     /// sender for forwarding messages from the session's client to the server
-    pub(crate) client_msg_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientMsg>>,
+    pub(crate) client_val_sender: crossbeam::channel::Sender<
+        SessionSourceMsg<SessionID, ClientVal<ClientMsg, ClientRequest>>
+    >,
 
     /// config: maximum message size (bytes)
     pub(crate) max_msg_size: u32,
@@ -33,9 +43,10 @@ where
 }
 
 #[async_trait::async_trait]
-impl<ClientMsg> ezsockets::SessionExt for SessionHandler<ClientMsg>
+impl<ClientMsg, ClientRequest> ezsockets::SessionExt for SessionHandler<ClientMsg, ClientRequest>
 where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     type ID   = SessionID;
     type Call = ();
@@ -115,7 +126,7 @@ where
             tracing::trace!("received client message that's too large, closing session...");
             self.close("message size violation").await; return Ok(());
         }
-        let Ok(message) = bincode::DefaultOptions::new().deserialize::<ClientMsg>(&bytes[..])
+        let Ok(message) = bincode::DefaultOptions::new().deserialize(&bytes[..])
         else
         {
             tracing::trace!("received client message that failed to deserialize, closing session...");
@@ -123,7 +134,7 @@ where
         };
 
         // try to forward client message to session owner
-        if let Err(err) = self.client_msg_sender.send(SessionSourceMsg::new(self.id, message))
+        if let Err(err) = self.client_val_sender.send(SessionSourceMsg::new(self.id, message))
         {
             tracing::error!(?err, "client msg sender is broken, closing session...");
             self.close("session error").await; return Ok(());
@@ -140,9 +151,10 @@ where
     }
 }
 
-impl<ClientMsg> SessionHandler<ClientMsg>
+impl<ClientMsg, ClientRequest> SessionHandler<ClientMsg, ClientRequest>
 where
     ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     /// Close the session
     async fn close(&mut self, reason: &str)

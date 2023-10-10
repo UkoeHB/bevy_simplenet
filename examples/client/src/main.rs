@@ -16,11 +16,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoClient = bevy_simplenet::Client::<DemoServerMsg, DemoClientMsg, ()>;
+type DemoClient = bevy_simplenet::Client::<DemoMsgPack>;
+type DemoServerVal = bevy_simplenet::ServerValFromPack<DemoMsgPack>;
 
-fn client_factory() -> DemoClient::Factory
+fn client_factory() -> bevy_simplenet::ClientFactory<DemoMsgPack>
 {
-    DemoClient::Factory::new("demo")
+    bevy_simplenet::ClientFactory::<DemoMsgPack>::new("demo")
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ fn handle_button_select(
     }
 
     // send select message
-    let Ok(signal) = client.send(&DemoClientMsg::Select)
+    let Ok(signal) = client.send(DemoClientMsg::Select)
     else
     {
         commands.add(deselect_callback.clone());
@@ -300,7 +301,7 @@ fn handle_server_incoming(
 ){
     let (mut pending_select, deselect_callback) = current_state.single_mut();
 
-    while let Some(message) = client.next_msg()
+    while let Some(DemoServerVal::Msg(message)) = client.next_val()
     {
         match message
         {

@@ -1,10 +1,6 @@
 //documentation
 #![doc = include_str!("../README.md")]
 
-//features
-#![allow(incomplete_features)]
-#![feature(inherent_associated_types)]
-
 //common
 cfg_if::cfg_if! { if #[cfg(any(feature = "client", feature = "server"))] {
     mod authentication;

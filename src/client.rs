@@ -4,7 +4,6 @@ use crate::*;
 //third-party shortcuts
 use bincode::Options;
 use enfync::Handle;
-use serde::{Serialize, Deserialize};
 
 //standard shortcuts
 use core::fmt::Debug;
@@ -95,38 +94,24 @@ pub enum ClientReport
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
-pub struct Client<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+pub struct Client<Msgs: MsgPack>
 {
     /// this client's id
     client_id: u128,
     /// core websockets client
-    client: ezsockets::Client<ClientHandler<ServerMsg>>,
+    client: ezsockets::Client<ClientHandlerFromPack<Msgs>>,
     /// sender for connection events (used for 'closed by self')
     connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// receiver for connection events
     connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
     /// receiver for messages sent by the server
-    server_msg_receiver: crossbeam::channel::Receiver<ServerMsg>,
+    server_val_receiver: crossbeam::channel::Receiver<ServerValFromPack<Msgs>>,
     /// signal for when the internal client is shut down
     client_closed_signal: enfync::PendingResult<()>,
-
-    /// phantom
-    _phantom: PhantomData<(ClientMsg, ConnectMsg)>,
 }
 
-impl<ServerMsg, ClientMsg, ConnectMsg> Client<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+impl<Msgs: MsgPack> Client<Msgs>
 {
-    /// Associated factory type.
-    pub type Factory = ClientFactory<ServerMsg, ClientMsg, ConnectMsg>;
-
     /// Send message to server.
     ///
     /// Returns `Ok(ezsockets::MessageSignal)` on success. The signal can be used to track the message status. Messages
@@ -134,7 +119,7 @@ where
     ///
     /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
     /// after this returns `Err`).
-    pub fn send(&self, msg: &ClientMsg) -> Result<ezsockets::MessageSignal, ()>
+    pub fn send(&self, msg: Msgs::ClientMsg) -> Result<ezsockets::MessageSignal, ()>
     {
         if self.is_dead()
         {
@@ -143,7 +128,9 @@ where
         }
 
         // forward message to server
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(msg) else { return Err(()); };
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientValFromPack::<Msgs>::Msg(msg))
+        else { return Err(()); };
+
         match self.client.binary(ser_msg)
         {
             Ok(signal) => Ok(signal),
@@ -155,17 +142,19 @@ where
         }
     }
 
-    /// Try to get next message received from server.
-    pub fn next_msg(&self) -> Option<ServerMsg>
-    {
-        let Ok(msg) = self.server_msg_receiver.try_recv() else { return None; };
-        Some(msg)
-    }
+    //todo: send request to server
 
-    /// Try to get next client report.
+    /// Try to get the next client report.
     pub fn next_report(&self) -> Option<ClientReport>
     {
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
+        Some(msg)
+    }
+
+    /// Try to get the next server value.
+    pub fn next_val(&self) -> Option<ServerValFromPack<Msgs>>
+    {
+        let Ok(msg) = self.server_val_receiver.try_recv() else { return None; };
         Some(msg)
     }
 
@@ -175,7 +164,7 @@ where
         self.client_id
     }
 
-    /// Test if client is dead (no longer connected to server and won't reconnect).
+    /// Test if the client is dead (no longer connected to server and won't reconnect).
     /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next_report()`] when the client's internal actor
     ///   dies.
     pub fn is_dead(&self) -> bool
@@ -215,11 +204,7 @@ where
     }
 }
 
-impl<ServerMsg, ClientMsg, ConnectMsg> Drop for Client<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+impl<Msgs: MsgPack> Drop for Client<Msgs>
 {
     fn drop(&mut self)
     {
@@ -233,21 +218,13 @@ where
 /// Factory for producing servers that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
-pub struct ClientFactory<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize,
+pub struct ClientFactory<Msgs: MsgPack>
 {
     protocol_version : &'static str,
-    _phantom         : PhantomData<(ServerMsg, ClientMsg, ConnectMsg)>,
+    _phantom         : PhantomData<Msgs>,
 }
 
-impl<ServerMsg, ClientMsg, ConnectMsg> ClientFactory<ServerMsg, ClientMsg, ConnectMsg>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de> + 'static,
-    ClientMsg: Clone + Debug + Send + Sync + Serialize + 'static,
-    ConnectMsg: Clone + Debug + Send + Sync + Serialize + 'static,
+impl<Msgs: MsgPack> ClientFactory<Msgs>
 {
     /// Make a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
@@ -261,8 +238,8 @@ where
         url            : url::Url,
         auth           : AuthRequest,
         config         : ClientConfig,
-        connect_msg    : ConnectMsg,
-    ) -> Client<ServerMsg, ClientMsg, ConnectMsg>
+        connect_msg    : Msgs::ConnectMsg,
+    ) -> Client<Msgs>
     {
         // prepare to make client connection
         // note: urls cannot contain raw bytes so we must serialize as json
@@ -296,7 +273,7 @@ where
                 connection_report_sender,
                 connection_report_receiver
             ) = crossbeam::channel::unbounded::<ClientReport>();
-        let (server_msg_sender, server_msg_receiver) = crossbeam::channel::unbounded::<ServerMsg>();
+        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerValFromPack<Msgs>>();
 
         // prepare client connector
         let client_connector = {
@@ -312,11 +289,11 @@ where
         let (client, mut client_task_handle) = ezsockets::connect_with(
                 move |client|
                 {
-                    ClientHandler::<ServerMsg>{
+                    ClientHandlerFromPack::<Msgs>{
                             config,
                             client,
                             connection_report_sender: connection_report_sender_clone,
-                            server_msg_sender
+                            server_val_sender
                         }
                 },
                 client_config,
@@ -344,9 +321,8 @@ where
                 client,
                 connection_report_sender,
                 connection_report_receiver,
-                server_msg_receiver,
+                server_val_receiver,
                 client_closed_signal,
-                _phantom: PhantomData::default(),
             }
     }
 }

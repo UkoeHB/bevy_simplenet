@@ -2,8 +2,6 @@
 
 Provides a bi-directional server/client channel implemented over websockets. Clients automatically work on native and WASM targets. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
 
-**Warning**: This crate requires nightly rust (see open TODOs).
-
 
 ## Features
 
@@ -44,28 +42,42 @@ use std::time::Duration;
 
 
 // define a channel
-// - it is recommended to make server/client factories with baked-in protocol versions (e.g.
-//   with env!("CARGO_PKG_VERSION"))
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ServerMsg(pub u64);
+pub struct TestServerMsg(pub u64);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ClientMsg(pub u64);
+pub struct TestClientMsg(pub u64);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ConnectMsg(pub String);
+pub struct TestConnectMsg(pub String);
 
-type TestServer = bevy_simplenet::Server::<ServerMsg, ClientMsg, ConnectMsg>;
-type TestClient = bevy_simplenet::Client::<ServerMsg, ClientMsg, ConnectMsg>;
-
-fn server_factory() -> TestServer::Factory
+#[derive(Debug, Clone)]
+pub struct TestMsgPack;
+impl bevy_simplenet::MsgPack for TestMsgPack
 {
-    TestServer::Factory::new("test")
+    type ConnectMsg = TestConnectMsg;
+    type ClientMsg = TestClientMsg;
+    type ClientRequest = ();
+    type ServerMsg = TestServerMsg;
+    type ServerResponse = ();
 }
 
-fn client_factory() -> TestClient::Factory
+type TestServer = bevy_simplenet::Server::<TestMsgPack>;
+type TestClient = bevy_simplenet::Client::<TestMsgPack>;
+type TestServerVal = bevy_simplenet::ServerValFromPack<TestMsgPack>;
+type TestClientVal = bevy_simplenet::ClientValFromPack<TestMsgPack>;
+
+fn server_factory() -> bevy_simplenet::ServerFactory<TestMsgPack>
 {
-    TestClient::Factory::new("test")  //must use same protocol version string as the server
+    // It is recommended to make server/client factories with baked-in protocol versions (e.g.
+    //   with env!("CARGO_PKG_VERSION")).
+    bevy_simplenet::ServerFactory::<TestMsgPack>::new("test")
+}
+
+fn client_factory() -> bevy_simplenet::ClientFactory<TestMsgPack>
+{
+    // You must use the same protocol version string as the server.
+    bevy_simplenet::ClientFactory::<TestMsgPack>::new("test")
 }
 
 
@@ -101,7 +113,7 @@ let client = client_factory().new_client(
         server.url(),
         bevy_simplenet::AuthRequest::None{ client_id },
         bevy_simplenet::ClientConfig::default(),
-        ConnectMsg(String::from("hello"))
+        TestConnectMsg(String::from("hello"))
     );
 sleep(sleep_duration);
 assert_eq!(server.num_connections(), 1u64);
@@ -116,25 +128,29 @@ assert_eq!(connect_msg.0, String::from("hello"));
 
 
 // send message: client -> server
-let signal = client.send(&ClientMsg(42)).unwrap();
+let signal = client.send(TestClientMsg(42)).unwrap();
 assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 sleep(sleep_duration);
 assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
 
 
 // read message from client
-let (msg_client_id, ClientMsg(msg_client_val)) = server.next_msg().unwrap();
+let (
+        msg_client_id,
+        TestClientVal::Msg(TestClientMsg(msg_client_val))
+    ) = server.next_val().unwrap() else { todo!() };
 assert_eq!(msg_client_id, client_id);
 assert_eq!(msg_client_val, 42);
 
 
 // send message: server -> client
-server.send(client_id, ServerMsg(24)).unwrap();
+server.send(client_id, TestServerMsg(24)).unwrap();
 sleep(sleep_duration);
 
 
 // read message from server
-let ServerMsg(msg_server_val) = client.next_msg().unwrap();
+let TestServerVal::Msg(TestServerMsg(msg_server_val)) =
+    client.next_val().unwrap() else { todo!() };
 assert_eq!(msg_server_val, 24);
 
 
@@ -161,7 +177,7 @@ else { panic!("client not dead"); };
     - client id = hash(client key)
     - auth key signs { client id, token expiry }
     - client key signs { auth signature }
-- Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support). Ultimately this will allow switching to stable rust.
+- Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
 - Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `bevy_simplenet::Server::send()` method.
 
 

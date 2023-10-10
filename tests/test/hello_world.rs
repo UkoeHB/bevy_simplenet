@@ -21,17 +21,30 @@ pub struct DemoClientMsg(pub u64);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DemoConnectMsg(pub String);
 
-type ServerDemo = bevy_simplenet::Server::<DemoServerMsg, DemoClientMsg, DemoConnectMsg>;
-type ClientDemo = bevy_simplenet::Client::<DemoServerMsg, DemoClientMsg, DemoConnectMsg>;
-
-fn server_demo_factory() -> ServerDemo::Factory
+#[derive(Debug, Clone)]
+pub struct DemoMsgPack;
+impl bevy_simplenet::MsgPack for DemoMsgPack
 {
-    ServerDemo::Factory::new("test")
+    type ConnectMsg = DemoConnectMsg;
+    type ClientMsg = DemoClientMsg;
+    type ClientRequest = ();
+    type ServerMsg = DemoServerMsg;
+    type ServerResponse = ();
 }
 
-fn client_demo_factory() -> ClientDemo::Factory
+type _DemoServer = bevy_simplenet::Server::<DemoMsgPack>;
+type _DemoClient = bevy_simplenet::Client::<DemoMsgPack>;
+type DemoServerVal = bevy_simplenet::ServerValFromPack<DemoMsgPack>;
+type DemoClientVal = bevy_simplenet::ClientValFromPack<DemoMsgPack>;
+
+fn server_demo_factory() -> bevy_simplenet::ServerFactory<DemoMsgPack>
 {
-    ClientDemo::Factory::new("test")
+    bevy_simplenet::ServerFactory::<DemoMsgPack>::new("test")
+}
+
+fn client_demo_factory() -> bevy_simplenet::ClientFactory<DemoMsgPack>
+{
+    bevy_simplenet::ClientFactory::<DemoMsgPack>::new("test")
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -102,12 +115,12 @@ fn bevy_simplenet_hello_world()
     // send message: client -> server
     tracing::info!("ws hello world test: client sending msg...");
     let client_val = 42;
-    let signal = websocket_client.send(&DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(DemoClientMsg(client_val)).unwrap();
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some((msg_client_id, DemoClientMsg(msg_client_val))) = websocket_server.next_msg()
+    let Some((msg_client_id, DemoClientVal::Msg(DemoClientMsg(msg_client_val)))) = websocket_server.next_val()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_val, msg_client_val);
@@ -121,7 +134,7 @@ fn bevy_simplenet_hello_world()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(DemoServerMsg(msg_server_val)) = websocket_client.next_msg()
+    let Some(DemoServerVal::Msg(DemoServerMsg(msg_server_val))) = websocket_client.next_val()
     else { panic!("client did not receive server msg"); };
     assert_eq!(server_val, msg_server_val);
 

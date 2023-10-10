@@ -11,25 +11,34 @@ use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+pub(crate) type ClientHandlerFromPack<Msgs> = ClientHandler<
+        <Msgs as MsgPack>::ServerMsg,
+        <Msgs as MsgPack>::ServerResponse,
+    >;
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug)]
-pub(crate) struct ClientHandler<ServerMsg>
+pub(crate) struct ClientHandler<ServerMsg, ServerResponse>
 where
     ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     /// config
     pub(crate) config: ClientConfig,
     /// core websockets client
-    pub(crate) client: ezsockets::Client<ClientHandler<ServerMsg>>,
+    pub(crate) client: ezsockets::Client<ClientHandler<ServerMsg, ServerResponse>>,
     /// collects connection events
     pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// collects messages from the server
-    pub(crate) server_msg_sender: crossbeam::channel::Sender<ServerMsg>,
+    pub(crate) server_val_sender: crossbeam::channel::Sender<ServerVal<ServerMsg, ServerResponse>>,
 }
 
 #[async_trait::async_trait]
-impl<ServerMsg> ezsockets::ClientExt for ClientHandler<ServerMsg>
+impl<ServerMsg, ServerResponse> ezsockets::ClientExt for ClientHandler<ServerMsg, ServerResponse>
 where
     ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     type Call = ();
 
@@ -82,7 +91,7 @@ where
         tracing::trace!("received binary from server");
 
         // deserialize message
-        let Ok(server_msg) = bincode::DefaultOptions::new().deserialize::<ServerMsg>(&bytes[..])
+        let Ok(server_msg) = bincode::DefaultOptions::new().deserialize(&bytes[..])
         else
         {
             tracing::warn!("received server msg that failed to deserialize");
@@ -90,7 +99,7 @@ where
         };
 
         // forward to client owner
-        if let Err(err) = self.server_msg_sender.send(server_msg)
+        if let Err(err) = self.server_val_sender.send(server_msg)
         {
             tracing::error!(?err, "failed to forward server msg to client");
             return Err(Box::new(ClientError::SendError));  //client is broken
@@ -165,9 +174,10 @@ where
     }
 }
 
-impl<ServerMsg> Drop for ClientHandler<ServerMsg>
+impl<ServerMsg, ServerResponse> Drop for ClientHandler<ServerMsg, ServerResponse>
 where
     ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
 {
     fn drop(&mut self)
     {

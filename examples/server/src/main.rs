@@ -11,11 +11,12 @@ use std::collections::HashSet;
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoServer = bevy_simplenet::Server::<DemoServerMsg, DemoClientMsg, ()>;
+type DemoServer = bevy_simplenet::Server::<DemoMsgPack>;
+type DemoClientVal = bevy_simplenet::ClientValFromPack<DemoMsgPack>;
 
-fn server_factory() -> DemoServer::Factory
+fn server_factory() -> bevy_simplenet::ServerFactory<DemoMsgPack>
 {
-    DemoServer::Factory::new("demo")
+    bevy_simplenet::ServerFactory::<DemoMsgPack>::new("demo")
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -44,7 +45,7 @@ fn update_client_connections(server: Res<DemoServer>, mut clients: ResMut<Client
 
 fn handle_client_incoming(server: Res<DemoServer>, clients: Res<ClientConnections>)
 {
-    while let Some((client_id, message)) = server.next_msg()
+    while let Some((client_id, DemoClientVal::Msg(message))) = server.next_val()
     {
         match message
         {
