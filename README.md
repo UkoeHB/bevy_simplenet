@@ -1,14 +1,21 @@
-# Bevy Simplenet {INITIAL RELEASE IS WIP}
+# Bevy Simplenet
 
-Provides a bi-directional server/client channel implemented over websockets. Clients automatically work on native and WASM targets. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
+Provides a bi-directional server/client channel implemented over websockets. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
+
+- Clients automatically work on native and WASM targets.
+- Client/server channel includes one-shot messages and a request/response API.
+- Client message status tracking.
+- Optional server TLS.
+- Client authentication (WIP).
+
 
 
 ## Features
 
 - `default`: `bevy`, `client`, `server`
 - `bevy`: derives `Resource` on `Client` and `Server`
-- `client`: enables simplenet clients (native and WASM targets)
-- `server`: enables simplenet servers (native-only targets)
+- `client`: enables clients (native and WASM targets)
+- `server`: enables servers (native-only targets)
 - `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
 - `tls-openssl`: enables TLS for servers via [`OpenSSL`](https://crates.io/crates/openssl)
 
@@ -16,22 +23,22 @@ Provides a bi-directional server/client channel implemented over websockets. Cli
 
 ## WASM
 
-On WASM targets the client backend will not update while any other tasks are running. You must either build an IO-oriented application which naturally spends a lot of time polling tasks, or manually release the main thread periodically (e.g. with `web_sys::Window::set_timeout_with_callback_and_timeout_and_arguments_0()`). For Bevy apps the latter happens automatically at the end of every app update/tick (see the `bevy::app::ScheduleRunnerPlugin` [implementation](https://github.com/bevyengine/bevy)).
+On WASM targets the client backend will not update while any other tasks are running. You must either build an IO-oriented application that naturally spends a lot of time polling tasks, or manually release the main thread periodically (e.g. with `web_sys::Window::set_timeout_with_callback_and_timeout_and_arguments_0()`). For Bevy apps the latter happens automatically at the end of every app update/tick (see the `bevy::app::ScheduleRunnerPlugin` [implementation](https://github.com/bevyengine/bevy)).
 
 
 
 ## Usage notes
 
-- Uses `enfync` runtimes to create servers/clients (`tokio` or `wasm_bindgen_futures::spawn_local()`). The backend is `ezsockets`.
+- Servers and clients use [enfync](https://crates.io/crates/enfync) runtimes. The backend is [ezsockets](https://github.com/gbaranski/ezsockets).
 - A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
-- Server session ids equal client ids. Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client auth request will have the same session id. Connections will be rejected if an id is already connected.
-- Connect messages will be cloned for all reconnect attempts by clients, so they should be treated as static data.
-- Server or client messages may fail to send if the underlying connection is broken. Clients can use the [`ezsockets::MessageSignal`] returned from [`Client::send()`] to track the status of a message. Message tracking is not currently available for servers.
+- Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
+- Client connect messages will be cloned for all reconnect attempts, so they should be treated as static data.
+- Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`] and [`Client::request()`] to track the status of a message. Message tracking is not currently available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.
 
 
 
-## Usage
+## Example
 
 ```rust
 // path shortcuts
@@ -167,8 +174,8 @@ let (_, TestClientVal::Request((), request_token)) = server.next_val().unwrap()
 else { todo!() };
 
 
-// acknowledge the request
-server.acknowledge(request_token);
+// acknowledge the request (consumes the token without sending a Response)
+server.acknowledge(request_token).unwrap();
 sleep(sleep_duration);
 assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Acknowledged);
 
@@ -198,10 +205,7 @@ else { panic!("client not dead"); };
 
 ## TODOs
 
-- Implement `AuthToken`:
-    - client id = hash(client key)
-    - auth key signs { client id, token expiry }
-    - client key signs { auth signature }
+- Implement `AuthToken` for client/server authentication.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
 - Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `bevy_simplenet::Server::send()` method.
 
