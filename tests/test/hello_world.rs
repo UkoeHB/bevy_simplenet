@@ -34,8 +34,8 @@ impl bevy_simplenet::ChannelPack for DemoChannel
 
 type _DemoServer = bevy_simplenet::Server<DemoChannel>;
 type _DemoClient = bevy_simplenet::Client<DemoChannel>;
-type DemoServerVal = bevy_simplenet::ServerVal<DemoChannel>;
-type DemoClientVal = bevy_simplenet::ClientVal<DemoChannel>;
+type DemoServerVal = bevy_simplenet::ServerValFrom<DemoChannel>;
+type DemoClientVal = bevy_simplenet::ClientValFrom<DemoChannel>;
 
 fn server_demo_factory() -> bevy_simplenet::ServerFactory<DemoChannel>
 {

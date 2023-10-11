@@ -6,7 +6,8 @@ use bincode::Options;
 
 //standard shortcuts
 use core::fmt::Debug;
-use std::sync::{Arc, AtomicBool};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::collections::HashMap;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -18,8 +19,8 @@ fn reject_client_request<Channel: ChannelPack>(
     request_id : u64
 ){
     // pack the message
-    let packed_msg = ServerMeta::<Channel>::Val(
-            ServerVal::<Channel>::Reject(request_id)
+    let packed_msg = ServerMetaFrom::<Channel>::Val(
+            ServerValFrom::<Channel>::Reject(request_id)
         );
 
     // serialize message
@@ -53,7 +54,7 @@ pub(crate) struct ConnectionHandler<Channel: ChannelPack>
 
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
-    pub(crate) client_val_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientVal<Channel>>>,
+    pub(crate) client_val_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>,
 }
 
 #[async_trait::async_trait]
@@ -112,7 +113,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                     let request_rejector =
                         move | request_id: u64 |
                         {
-                            reject_client_request(&session_clone, session_id, request_id);
+                            reject_client_request::<Channel>(&session_clone, session_id, request_id);
                         };
 
                     // make session handler
@@ -184,7 +185,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
             SessionCommand::<Channel>::Send(msg_to_send) =>
             {
                 // pack the message
-                let packed_msg = ServerMeta::<Channel>::Val(msg_to_send);
+                let packed_msg = ServerMetaFrom::<Channel>::Val(msg_to_send);
 
                 // serialize message
                 tracing::trace!(session_msg.id, "sending message to session");

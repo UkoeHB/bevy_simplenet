@@ -64,8 +64,8 @@ impl bevy_simplenet::ChannelPack for TestChannel
 
 type TestServer = bevy_simplenet::Server<TestChannel>;
 type TestClient = bevy_simplenet::Client<TestChannel>;
-type TestServerVal = bevy_simplenet::ServerVal<TestChannel>;
-type TestClientVal = bevy_simplenet::ClientVal<TestChannel>;
+type TestServerVal = bevy_simplenet::ServerValFrom<TestChannel>;
+type TestClientVal = bevy_simplenet::ClientValFrom<TestChannel>;
 
 fn server_factory() -> bevy_simplenet::ServerFactory<TestChannel>
 {

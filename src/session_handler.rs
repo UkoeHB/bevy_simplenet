@@ -3,10 +3,10 @@ use crate::*;
 
 //third-party shortcuts
 use bincode::Options;
-use serde::Deserialize;
 
 //standard shortcuts
-use std::sync::{Arc, AtomicBool, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::fmt::Debug;
 use std::vec::Vec;
 
@@ -21,7 +21,7 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
     pub(crate) session: ezsockets::Session<SessionID, ()>,
     /// sender for forwarding messages from the session's client to the server
     pub(crate) client_val_sender: crossbeam::channel::Sender<
-        SessionSourceMsg<SessionID, ClientVal<Channel>>
+        SessionSourceMsg<SessionID, ClientValFrom<Channel>>
     >,
 
     /// config: maximum message size (bytes)
@@ -33,7 +33,7 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
     pub(crate) rate_limit_tracker: RateLimitTracker,
 
     /// session wrapper for sending request rejections
-    pub(crate) request_rejector: Arc<dyn Fn(u64) + Send + Sync + 'static>,
+    pub(crate) request_rejector: Arc<dyn RequestRejectorFn>,
     /// tracks the lowest-encountered request id in order to help clients synchronize after reconnecting
     pub(crate) earliest_request_id: Option<u64>,
 
@@ -136,18 +136,18 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
         // decide what to do with the message
         match message
         {
-            ClientMeta::<Channel>::Msg(msg) =>
+            ClientMetaFrom::<Channel>::Msg(msg) =>
             {
                 // try to forward client message to session owner
                 if let Err(err) = self.client_val_sender.send(
-                        SessionSourceMsg::new(self.id, ClientVal::<Channel>::Msg(msg))
+                        SessionSourceMsg::new(self.id, ClientValFrom::<Channel>::Msg(msg))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
                     self.close("session error").await; return Ok(());
                 }
             }
-            ClientMeta::<Channel>::Request(request, request_id) =>
+            ClientMetaFrom::<Channel>::Request(request, request_id) =>
             {
                 // register the request
                 // - clients should only be sending request ids that increase
@@ -166,14 +166,14 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 
                 // try to forward client request to session owner
                 if let Err(err) = self.client_val_sender.send(
-                        SessionSourceMsg::new(self.id, ClientVal::<Channel>::Request(request, token))
+                        SessionSourceMsg::new(self.id, ClientValFrom::<Channel>::Request(request, token))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
                     self.close("session error").await; return Ok(());
                 }
             }
-            ClientMeta::<Channel>::Sync(request) =>
+            ClientMetaFrom::<Channel>::Sync(request) =>
             {
                 // register the request
                 if self.earliest_request_id.is_none()
@@ -183,7 +183,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 
                 // assemble sync response
                 let earliest_req = self.earliest_request_id.unwrap();
-                let sync_response = ServerMeta::<Channel>::Sync(SyncResponse{ request, earliest_req });
+                let sync_response = ServerMetaFrom::<Channel>::Sync(SyncResponse{ request, earliest_req });
 
                 // serialize message
                 tracing::trace!(self.id, "sending sync response to session");

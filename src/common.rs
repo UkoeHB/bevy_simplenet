@@ -1,4 +1,5 @@
 //local shortcuts
+use crate::*;
 
 //third-party shortcuts
 use serde::{Serialize, Deserialize};
@@ -14,7 +15,7 @@ pub type SessionID = u128;
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Represents the message types that can be sent between a client and server.
-pub trait ChannelPack: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static
+pub trait ChannelPack: Clone + Debug + 'static
 {
     /// A client sends this to a server as part of connection requests.
     ///
@@ -37,12 +38,12 @@ pub trait ChannelPack: Clone + Debug + Send + Sync + Serialize + for<'de> Deseri
 
 /// A server value that may be received by a client.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum ServerVal<Channel: ChannelPack>
+pub enum ServerVal<ServerMsg, ServerResponse>
 {
     /// A one-shot server message.
-    Msg(Channel::ServerMsg),
+    Msg(ServerMsg),
     /// A response to a client request.
-    Response(Channel::ServerResponse, u64),
+    Response(ServerResponse, u64),
     /// Acknowledges receiving a client request.
     ///
     /// Will not be followed by a subsequent response (you either get a response, ack, or rejection).
@@ -51,7 +52,7 @@ pub enum ServerVal<Channel: ChannelPack>
     Reject(u64),
 }
 
-impl ServerVal<Channel: ChannelPack>
+impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
 {
     /// Convert a server value into a request status.
     pub(crate) fn into_request_status(&self) -> Option<(u64, RequestStatus)>
@@ -59,12 +60,19 @@ impl ServerVal<Channel: ChannelPack>
         match self
         {
             Self::Msg(_)          => None,
-            Self::Response(_, id) => Some((id, RequestStatus::Responded)),
-            Self::Ack(id)         => Some((id, RequestStatus::Acknowledged)),
-            Self::Reject(id)      => Some((id, RequestStatus::Rejected)),
+            Self::Response(_, id) => Some((*id, RequestStatus::Responded)),
+            Self::Ack(id)         => Some((*id, RequestStatus::Acknowledged)),
+            Self::Reject(id)      => Some((*id, RequestStatus::Rejected)),
         }
     }
 }
+
+//-------------------------------------------------------------------------------------------------------------------
+
+pub type ServerValFrom<Channel> = ServerVal<
+    <Channel as ChannelPack>::ServerMsg,
+    <Channel as ChannelPack>::ServerResponse
+>;
 
 //-------------------------------------------------------------------------------------------------------------------
 

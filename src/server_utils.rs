@@ -2,15 +2,10 @@
 use crate::*;
 
 //third-party shortcuts
-use axum::response::IntoResponse;
-use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -89,7 +84,7 @@ pub struct RequestToken
 {
     client_id    : SessionID,
     request_id   : u64,
-    rejector     : Option<Arc<dyn Fn(u64) + Send + Sync + 'static>>,
+    rejector     : Option<Arc<dyn RequestRejectorFn>>,
     death_signal : Arc<AtomicBool>,
 }
 
@@ -99,7 +94,7 @@ impl RequestToken
     pub(crate) fn new(
         client_id    : SessionID,
         request_id   : u64,
-        rejector     : Arc<dyn Fn(u64) + Send + Sync + 'static>,
+        rejector     : Arc<dyn RequestRejectorFn>,
         death_signal : Arc<AtomicBool>
     ) -> Self
     {
@@ -125,7 +120,7 @@ impl RequestToken
     }
 
     /// Consume the token, preventing it from sending a rejection message when dropped.
-    pub(crate) fn take(self) -> u64
+    pub(crate) fn take(mut self) -> u64
     {
         let _ = self.rejector.take();
         self.request_id
@@ -142,29 +137,44 @@ impl Drop for RequestToken
     }
 }
 
+impl std::fmt::Debug for RequestToken
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        write!(f, "RequestToken [{}, {}]", self.client_id, self.request_id)
+    }
+}
+
 //-------------------------------------------------------------------------------------------------------------------
 
 /// A client value that may be received by a server.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum ClientVal<Channel: ChannelPack>
+#[derive(Debug)]
+pub enum ClientVal<ClientMsg, ClientRequest>
 {
     /// A one-shot client message.
-    Msg(Channel::ClientMsg),
+    Msg(ClientMsg),
     /// A request the server should reply to with a response, ack, or rejection.
-    Request(Channel::ClientRequest, RequestToken),
+    Request(ClientRequest, RequestToken),
 }
+
+//-------------------------------------------------------------------------------------------------------------------
+
+pub type ClientValFrom<Channel> = ClientVal<
+    <Channel as ChannelPack>::ClientMsg,
+    <Channel as ChannelPack>::ClientRequest
+>;
 
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Message targeted at a session.
 #[derive(Debug)]
-pub(crate) struct SessionTargetMsg<I: Debug + Clone, T: Debug + Clone>
+pub(crate) struct SessionTargetMsg<I, T>
 {
     pub(crate) id  : I,
     pub(crate) msg : T
 }
 
-impl<I: Debug + Clone, T: Debug + Clone> SessionTargetMsg<I, T>
+impl<I, T> SessionTargetMsg<I, T>
 {
     pub(crate) fn new(id: I, msg: T) -> SessionTargetMsg<I, T> { SessionTargetMsg::<I, T> { id, msg } }
 }
@@ -172,14 +182,14 @@ impl<I: Debug + Clone, T: Debug + Clone> SessionTargetMsg<I, T>
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Message sourced from a session.
-#[derive(Debug, Clone)]
-pub(crate) struct SessionSourceMsg<I: Debug + Clone, T: Debug + Clone>
+#[derive(Debug)]
+pub(crate) struct SessionSourceMsg<I, T>
 {
     pub(crate) id  : I,
     pub(crate) msg : T
 }
 
-impl<I: Debug + Clone, T: Debug + Clone> SessionSourceMsg<I, T>
+impl<I, T> SessionSourceMsg<I, T>
 {
     pub(crate) fn new(id: I, msg: T) -> SessionSourceMsg<I, T> { SessionSourceMsg::<I, T> { id, msg } }
 }
@@ -191,9 +201,21 @@ impl<I: Debug + Clone, T: Debug + Clone> SessionSourceMsg<I, T>
 pub(crate) enum SessionCommand<Channel: ChannelPack>
 {
     /// Send a server value.
-    Send(ServerVal<Channel>),
+    Send(ServerValFrom<Channel>),
     /// Close a session.
     Close(ezsockets::CloseFrame)
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Wrapper trait for `Fn(u64)`.
+pub(crate) trait RequestRejectorFn: Fn(u64) + Send + Sync + 'static {}
+impl<F> RequestRejectorFn for F where F: Fn(u64) + Send + Sync + 'static {}
+pub(crate) type RequestRejectorFnT = dyn RequestRejectorFn<Output = ()>;
+
+impl std::fmt::Debug for RequestRejectorFnT
+{
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { Ok(()) }
 }
 
 //-------------------------------------------------------------------------------------------------------------------

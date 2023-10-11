@@ -17,7 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------------------------------------------------
 
 type DemoClient = bevy_simplenet::Client<DemoChannel>;
-type DemoServerVal = bevy_simplenet::ServerVal<DemoChannel>;
+type DemoServerVal = bevy_simplenet::ServerValFrom<DemoChannel>;
 
 fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 {

@@ -3,7 +3,6 @@ use crate::*;
 
 //third-party shortcuts
 use bincode::Options;
-use serde::Deserialize;
 
 //standard shortcuts
 use core::fmt::Debug;
@@ -22,7 +21,7 @@ pub(crate) struct ClientHandler<Channel: ChannelPack>
     /// collects connection events
     pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// collects messages from the server
-    pub(crate) server_val_sender: crossbeam::channel::Sender<ServerVal<Channel>>,
+    pub(crate) server_val_sender: crossbeam::channel::Sender<ServerValFrom<Channel>>,
     /// synchronized tracker for pending requests
     pub(crate) pending_requests: Arc<Mutex<PendingRequestTracker>>,
     /// tracks the most recently acknowledged sync point (the lowest request id that the server is currently aware of)
@@ -93,13 +92,14 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         // decide how to handle the message
         match server_msg
         {
-            ServerMeta::<Channel>::Val(msg) =>
+            ServerMetaFrom::<Channel>::Val(msg) =>
             {
                 // handle pending request meta
                 if let Some((request_id, request_status)) = msg.into_request_status()
                 {
                     // clean up pending request
-                    self.pending_requests.lock().set_status_and_remove(request_id, request_status);
+                    let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+                    pending_requests.set_status_and_remove(request_id, request_status);
 
                     // discard message if request id is below the latest acknowledged sync point
                     if request_id < self.last_acked_sync_point
@@ -118,10 +118,11 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
                     return Err(Box::new(ClientError::SendError));
                 }
             }
-            ServerMeta::<Channel>::Sync(response) =>
+            ServerMetaFrom::<Channel>::Sync(response) =>
             {
                 // clean up pending requests
-                self.pending_requests.lock().handle_sync_response(response);
+                let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+                pending_requests.handle_sync_response(response);
                 self.last_acked_sync_point = std::cmp::max(response.earliest_req, self.last_acked_sync_point);
             }
         }
@@ -143,7 +144,13 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
         // make sync request if there are pending requests
-        self.pending_requests.lock().try_make_sync_request(&self.client);
+        let Ok(mut pending_requests) = self.pending_requests.lock()
+        else
+        {
+            tracing::error!("failed to lock pending requests");
+            return Err(Box::new(ClientError::SendError));
+        };
+        pending_requests.try_make_sync_request(&self.client);
 
         // forward connection event to client owner
         if let Err(err) = self.connection_report_sender.send(ClientReport::Connected)

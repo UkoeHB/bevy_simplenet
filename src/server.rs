@@ -7,12 +7,10 @@ use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -109,7 +107,7 @@ pub struct Server<Channel: ChannelPack>
     /// receives reports from the internal connection handler
     connection_report_receiver: crossbeam::channel::Receiver<ServerReport<Channel::ConnectMsg>>,
     /// receives client messages from the internal connection handler
-    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientVal<Channel>>>,
+    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>,
 
     /// signal indicates if server internal worker has stopped
     server_closed_signal: enfync::PendingResult<()>,
@@ -128,7 +126,7 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.server_val_sender.send(
-                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerVal::<Channel>::Msg(msg)))
+                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Msg(msg)))
             )
         {
             tracing::error!(?err, "failed to forward message to session");
@@ -154,7 +152,7 @@ impl<Channel: ChannelPack> Server<Channel>
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerVal::<Channel>::Response(response, token.take()))
+                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Response(response, token.take()))
             ))
         {
             tracing::error!(?err, "failed to forward response to session");
@@ -182,7 +180,7 @@ impl<Channel: ChannelPack> Server<Channel>
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerVal::<Channel>::Ack(token.take()))
+                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Ack(token.take()))
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");
@@ -230,7 +228,7 @@ impl<Channel: ChannelPack> Server<Channel>
     }
 
     /// Try to extract the next available value from a client.
-    pub fn next_val(&self) -> Option<(SessionID, ClientVal<Channel>)>
+    pub fn next_val(&self) -> Option<(SessionID, ClientValFrom<Channel>)>
     {
         let Ok(msg) = self.client_val_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
@@ -310,7 +308,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
         let (
                 client_val_sender,
                 client_val_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientVal<Channel>>>();
+            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>();
 
         // prepare connection counter
         // - this is used to communication the current number of connections from the connection handler to the

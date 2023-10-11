@@ -6,10 +6,9 @@ use bincode::Options;
 
 //standard shortcuts
 use core::fmt::Debug;
-use std::atomic::AtomicU8;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -130,7 +129,7 @@ pub(crate) struct RequestSignalInner
 
 impl RequestSignalInner {
     pub(crate) fn status(&self) -> RequestStatus {
-        match self.request_signal.load(Ordering::Acquire) {
+        match self.signal.load(Ordering::Acquire) {
             0u8 => RequestStatus::Waiting,
             1u8 => RequestStatus::Responded,
             2u8 => RequestStatus::Acknowledged,
@@ -141,11 +140,11 @@ impl RequestSignalInner {
 
     pub(crate) fn set(&self, state: RequestStatus) {
         match state {
-            RequestStatus::Waiting      => self.request_signal.store(0u8, Ordering::Release),
-            RequestStatus::Responded    => self.request_signal.store(1u8, Ordering::Release),
-            RequestStatus::Acknowledged => self.request_signal.store(2u8, Ordering::Release),
-            RequestStatus::Rejected     => self.request_signal.store(3u8, Ordering::Release),
-            RequestStatus::ResponseLost => self.request_signal.store(4u8, Ordering::Release),
+            RequestStatus::Waiting      => self.signal.store(0u8, Ordering::Release),
+            RequestStatus::Responded    => self.signal.store(1u8, Ordering::Release),
+            RequestStatus::Acknowledged => self.signal.store(2u8, Ordering::Release),
+            RequestStatus::Rejected     => self.signal.store(3u8, Ordering::Release),
+            RequestStatus::ResponseLost => self.signal.store(4u8, Ordering::Release),
             _ => panic!("invalid request status sent to RequestSignalInner"),
         }
     }
@@ -244,9 +243,9 @@ impl PendingRequestTracker
     /// Note that we assume if a sync request fails then it will coincide with a reconnect cycle that will trigger
     /// another sync request (or cause the client to shut down and ultimately mark pending requests as `ResponseLost`).
     /// This assumption may be broken by upstream bugs.
-    pub(crate) fn try_make_sync_request<ServerMsg, ServerResponse>(
+    pub(crate) fn try_make_sync_request<Channel: ChannelPack>(
         &mut self,
-        client: &ezsockets::Client<ClientHandler<ServerMsg, ServerResponse>>
+        client: &ezsockets::Client<ClientHandler<Channel>>
     ){
         // if there are no pending requests, there is no need for a sync request
         if self.pending_requests.is_empty() { return; }
@@ -257,7 +256,7 @@ impl PendingRequestTracker
         self.latest_sync_request = Some(request_id);
 
         // forward message to server
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMeta::<Channel>::Sync(request))
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMetaFrom::<Channel>::Sync(request))
         else { tracing::error!("failed serializing client sync request"); return; };
 
         if client.binary(ser_msg).is_err() { tracing::warn!("tried to send sync request to dead client"); }
@@ -266,7 +265,7 @@ impl PendingRequestTracker
     /// Handle a sync response from the server.
     ///
     /// We mark all pending requests lower than the server's earliest-seen request as [`RequestStatus::ResponseLost`].
-    pub(crate) fn handle_sync_response(response: SyncResponse)
+    pub(crate) fn handle_sync_response(&mut self, response: SyncResponse)
     {
         // ignore response if not responding to latest request
         if Some(response.request.request_id) != self.latest_sync_request
@@ -276,7 +275,7 @@ impl PendingRequestTracker
         self.pending_requests.retain(
                 |id, signal| -> bool
                 {
-                    if id >= response.earliest_req { return true; }
+                    if *id >= response.earliest_req { return true; }
                     signal.inner().set(RequestStatus::ResponseLost);
                     false
                 }

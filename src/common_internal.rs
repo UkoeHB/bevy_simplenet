@@ -17,7 +17,7 @@ pub(crate) const CONNECT_MSG_KEY : &'static str = "c";
 //-------------------------------------------------------------------------------------------------------------------
 
 /// A client request for synchronizing a server/client channel.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub(crate) struct SyncRequest
 {
     pub(crate) request_id: u64,
@@ -30,11 +30,11 @@ pub(crate) struct SyncRequest
 /// Includes the client's earliest request id that the server is aware of. This number may not be zero if the client has
 /// reconnected at least once. We use the earliest request id to identify older requests that have failed due to a
 /// reconnect.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub(crate) struct SyncResponse
 {
-    request: SyncRequest,
-    earliest_req: u64,
+    pub(crate) request: SyncRequest,
+    pub(crate) earliest_req: u64,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -43,11 +43,18 @@ pub(crate) struct SyncResponse
 ///
 /// Includes backend-specific and client-side messages.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) enum ServerMeta<Channel: ChannelPack>
+pub(crate) enum ServerMeta<ServerMsg, ServerResponse>
 {
-    Val(ServerVal<Channel>),
+    Val(ServerVal<ServerMsg, ServerResponse>),
     Sync(SyncResponse)
 }
+
+//-------------------------------------------------------------------------------------------------------------------
+
+pub(crate) type ServerMetaFrom<Channel> = ServerMeta<
+    <Channel as ChannelPack>::ServerMsg,
+    <Channel as ChannelPack>::ServerResponse
+>;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -55,11 +62,18 @@ pub(crate) enum ServerMeta<Channel: ChannelPack>
 ///
 /// Includes backend-specific and server-side messages.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) enum ClientMeta<Channel: ChannelPack>
+pub(crate) enum ClientMeta<ClientMsg, ClientRequest>
 {
-    Msg(Channel::ClientMsg),
-    Request(Channel::ClientRequest, u64),
+    Msg(ClientMsg),
+    Request(ClientRequest, u64),
     Sync(SyncRequest)
 }
+
+//-------------------------------------------------------------------------------------------------------------------
+
+pub(crate) type ClientMetaFrom<Channel> = ClientMeta<
+    <Channel as ChannelPack>::ClientMsg,
+    <Channel as ChannelPack>::ClientRequest
+>;
 
 //-------------------------------------------------------------------------------------------------------------------

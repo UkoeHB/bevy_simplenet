@@ -7,10 +7,8 @@ use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
-use std::atomic::AtomicU8;
 use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -35,7 +33,7 @@ pub struct Client<Channel: ChannelPack>
     /// receiver for connection events
     connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
     /// receiver for messages sent by the server
-    server_val_receiver: crossbeam::channel::Receiver<ServerVal<Channel>>,
+    server_val_receiver: crossbeam::channel::Receiver<ServerValFrom<Channel>>,
     /// signal for when the internal client is shut down
     client_closed_signal: enfync::PendingResult<()>,
     /// synchronized tracker for pending requests
@@ -56,7 +54,7 @@ impl<Channel: ChannelPack> Client<Channel>
         if self.is_dead() { tracing::warn!("tried to send message to dead client"); return Err(()); }
 
         // forward message to server
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMeta::<Channel>::Msg(msg))
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMetaFrom::<Channel>::Msg(msg))
         else { tracing::error!("failed serializing client message"); return Err(()); };
 
         match self.client.binary(ser_msg)
@@ -83,12 +81,12 @@ impl<Channel: ChannelPack> Client<Channel>
         if self.is_dead() { tracing::warn!("tried to send request to dead client"); return Err(()); }
 
         // prep request id
-        let mut pending_requests = self.pending_requests.lock();
+        let Ok(mut pending_requests) = self.pending_requests.lock() else { return Err(()); };
         let request_id = pending_requests.reserve_id();
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
-                &ClientMeta::<Channel>::Request(request, request_id)
+                &ClientMetaFrom::<Channel>::Request(request, request_id)
             )
         else { tracing::error!("failed serializing client request"); return Err(()); };
 
@@ -117,7 +115,7 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Try to get the next server value.
     ///
     /// If the client is dead, you can safely use this to drain any lingering server values.
-    pub fn next_val(&self) -> Option<ServerVal<Channel::ServerMsg, Channel::ServerResponse>>
+    pub fn next_val(&self) -> Option<ServerValFrom<Channel>>
     {
         let Ok(msg) = self.server_val_receiver.try_recv() else { return None; };
         Some(msg)
@@ -238,7 +236,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                 connection_report_sender,
                 connection_report_receiver
             ) = crossbeam::channel::unbounded::<ClientReport>();
-        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerVal<Channel>>();
+        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerValFrom<Channel>>();
 
         // prepare client connector
         let client_connector = {
