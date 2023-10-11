@@ -1,3 +1,3 @@
 ### Server
 
-`cargo run --release --example server`
+`cd` to this directory then: `cargo run --release`

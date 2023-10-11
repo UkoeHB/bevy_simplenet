@@ -51,14 +51,50 @@ fn status_to_string(status: ConnectionStatus) -> &'static str
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Component, Default)]
+struct ButtonOwner
+{
+    server_authoritative_id: Option<u128>,
+    predicted_id: Option<u128>
+}
+
+impl ButtonOwner
+{
+    fn display_id(&self) -> Option<u128>
+    {
+        if self.predicted_id.is_some() { return self.predicted_id }
+        self.server_authoritative_id
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Component)]
 struct ConnectionStatusFlag;
 
+#[derive(Component)]
+struct ButtonOwnerTextFlag;
+
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Component)]
-struct PendingSelect(Option<bevy_simplenet::MessageSignal>);
+struct PendingSelect(Option<bevy_simplenet::RequestSignal>);
+
+impl PendingSelect
+{
+    fn equals_request(&self, request_id: u64) -> bool
+    {
+        let Some(signal) = &self.0 else { return false; };
+        signal.id() == request_id
+    }
+
+    fn is_predicted(&self) -> bool
+    {
+        self.0.is_some()
+    }
+}
 
 impl Default for PendingSelect { fn default() -> Self { Self(None) } }
 
@@ -78,13 +114,30 @@ fn refresh_status_text(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+fn refresh_button_owner_text(
+    mut status_text : Query<&mut Text, With<ButtonOwnerTextFlag>>,
+    current_state   : Query<&ButtonOwner, Changed<ButtonOwner>>,
+){
+    if current_state.is_empty() { return; }
+    let text_section = &mut status_text.single_mut().sections[0].value;
+    text_section.clear();
+    match current_state.single().display_id()
+    {
+        Some(id) => { let _ = write!(text_section, "Owner: {}", id % 1_000_000u128); }
+        None     => { let _ = write!(text_section, "No owner"); }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 fn handle_button_select(
     mut commands      : Commands,
     client            : Res<DemoClient>,
     status            : Res<ConnectionStatus>,
-    mut current_state : Query<(&mut PendingSelect, &Callback<Deselect>)>,
+    mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
 ){
-    let (mut pending_select, deselect_callback) = current_state.single_mut();
+    let (mut pending_select, mut owner, deselect_callback) = current_state.single_mut();
 
     // if not connected then we force-deselect
     if *status != ConnectionStatus::Connected
@@ -93,16 +146,49 @@ fn handle_button_select(
         return;
     }
 
-    // send select message
-    let Ok(signal) = client.send(DemoClientMsg::Select)
+    // send select request
+    let Ok(signal) = client.request(DemoClientRequest::Select)
     else
     {
         commands.add(deselect_callback.clone());
         return;
     };
 
-    // cache the signal
-    pending_select.0 = Some(signal);
+    // save the predicted input
+    pending_select.0   = Some(signal);
+    owner.predicted_id = Some(client.id());
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn handle_button_deselect(mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner)>)
+{
+    let (mut pending_select, mut owner) = current_state.single_mut();
+
+    // clear the input prediction
+    pending_select.0   = None;
+    owner.predicted_id = None;
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn set_new_server_state(
+    In(server_state)  : In<Option<u128>>,
+    mut commands      : Commands,
+    client            : Res<DemoClient>,
+    mut current_state : Query<(&PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
+){
+    let (pending_select, mut owner, deselect_callback) = current_state.single_mut();
+
+    // update server state
+    owner.server_authoritative_id = server_state;
+
+    // update local state
+    if pending_select.is_predicted() { return; }
+    if server_state == Some(client.id()) { return; }
+    commands.add(deselect_callback.clone());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -153,6 +239,42 @@ fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+fn button_owner_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut UiTree, owner_base: Widget)
+{
+    // text layout helper
+    let layout_helper = Widget::create(
+            ui,
+            owner_base.end(""),
+            RelativeLayout{  //extend y-axis to avoid resizing issues
+                relative_1: Vec2 { x: 0., y: 0. },
+                relative_2: Vec2 { x: 100., y: 200. },
+                ..Default::default()
+            }
+        ).unwrap();
+
+    // text widget
+    let text = Widget::create(ui, layout_helper.end(""), SolidLayout::new()).unwrap();
+    let text_style = TextStyle {
+            font      : asset_server.load("fonts/FiraSans-Bold.ttf"),
+            font_size : 45.0,
+            color     : Color::WHITE,
+        };
+
+    commands.spawn(
+            (
+                TextElementBundle::new(
+                    text,
+                    TextParams::center().with_style(&text_style),
+                    "Owner: 000000"  //use initial value to get correct initial text boundary
+                ),
+                ButtonOwnerTextFlag
+            )
+        );
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 fn button_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut UiTree, button_base: Widget)
 {
     // default button image tied to button
@@ -190,12 +312,18 @@ fn button_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut 
         .with_selected_widget(selected_widget)
         .select_on_click()
         .select_callback(|world| syscall(world, (), handle_button_select))
+        .deselect_callback(|world| syscall(world, (), handle_button_deselect))
         .build::<MouseLButtonMain>(&mut entity_commands, button_base)
         .unwrap();
     entity_commands.insert(UIInteractionBarrier::<MainUI>::default());
 
     // cached select signal
-    entity_commands.insert(PendingSelect::default());
+    entity_commands.insert(
+            (
+                PendingSelect::default(),
+                ButtonOwner::default(),
+            )
+        );
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -237,6 +365,18 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>)
         ).unwrap();
     connection_status_section(&mut commands, &asset_server, &mut ui, text_base);
 
+    // button owner text
+    let owner_base = Widget::create(
+            &mut ui,
+            root.end("owner"),
+            RelativeLayout{  //above button
+                relative_1: Vec2 { x: 37., y: 15. },
+                relative_2: Vec2 { x: 63., y: 35. },
+                ..Default::default()
+            }
+        ).unwrap();
+    button_owner_section(&mut commands, &asset_server, &mut ui, owner_base);
+
     // button
     let button_base = Widget::create(
             &mut ui,
@@ -256,37 +396,23 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn deselect_client_if_pending(
-    mut commands      : Commands,
-    mut current_state : Query<(&mut PendingSelect, &Callback<Deselect>)>,
-){
-    let (mut pending_select, deselect_callback) = current_state.single_mut();
-    if !pending_select.0.is_some() { return; };
-    commands.add(deselect_callback.clone());
-    pending_select.0 = None;
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn update_connection_status(
-    mut commands : Commands,
-    client       : Res<DemoClient>,
-    mut status   : ResMut<ConnectionStatus>
+fn handle_connection_changes(
+    client     : Res<DemoClient>,
+    mut status : ResMut<ConnectionStatus>
 ){
     while let Some(connection_report) = client.next_report()
     {
         match connection_report
         {
-            bevy_simplenet::ClientReport::Connected         => *status = ConnectionStatus::Connected,
+            bevy_simplenet::ClientReport::Connected         =>
+            {
+                *status = ConnectionStatus::Connected;
+                let _ = client.request(DemoClientRequest::GetState);
+            },
             bevy_simplenet::ClientReport::Disconnected      |
             bevy_simplenet::ClientReport::ClosedByServer(_) |
-            bevy_simplenet::ClientReport::ClosedBySelf      =>
-            {
-                *status = ConnectionStatus::Connecting;
-                commands.add(|world: &mut World| syscall(world, (), deselect_client_if_pending));
-            }
-            bevy_simplenet::ClientReport::IsDead => *status = ConnectionStatus::Dead,
+            bevy_simplenet::ClientReport::ClosedBySelf      => *status = ConnectionStatus::Connecting,
+            bevy_simplenet::ClientReport::IsDead            => *status = ConnectionStatus::Dead,
         }
     }
 }
@@ -297,22 +423,48 @@ fn update_connection_status(
 fn handle_server_incoming(
     mut commands      : Commands,
     client            : Res<DemoClient>,
-    mut current_state : Query<(&mut PendingSelect, &Callback<Deselect>)>,
+    mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
 ){
-    let (mut pending_select, deselect_callback) = current_state.single_mut();
+    let (mut pending_select, mut owner, deselect_callback) = current_state.single_mut();
 
-    while let Some(DemoServerVal::Msg(message)) = client.next_val()
+    while let Some(server_val) = client.next_val()
     {
-        match message
+        match server_val
         {
-            DemoServerMsg::AckSelect =>
+            DemoServerVal::Msg(message) =>
             {
-                pending_select.0 = None;
+                match message
+                {
+                    DemoServerMsg::Current(new_id) =>
+                    {
+                        commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
+                    }
+                }
             }
-            DemoServerMsg::Deselect =>
+            DemoServerVal::Response(response, _request_id) =>
             {
-                // ignore deselects if the result of our most recent select is unknown
-                if pending_select.0.is_some() { continue; }
+                match response
+                {
+                    DemoServerResponse::Current(new_id) =>
+                    {
+                        commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
+                    }
+                }
+            }
+            DemoServerVal::Ack(request_id) =>
+            {
+                if !pending_select.equals_request(request_id) { continue; }
+
+                // merge predicted input
+                owner.server_authoritative_id = owner.predicted_id;
+                owner.predicted_id            = None;
+                pending_select.0              = None;
+            }
+            DemoServerVal::Reject(request_id) =>
+            {
+                if !pending_select.equals_request(request_id) { continue; }
+
+                // roll back predicted input
                 commands.add(deselect_callback.clone());
             }
         }
@@ -324,18 +476,21 @@ fn handle_server_incoming(
 
 fn check_pending_select(
     mut commands  : Commands,
-    current_state : Query<&PendingSelect>,
+    current_state : Query<(&PendingSelect, &Callback<Deselect>)>,
 ){
-    let pending_select = current_state.single();
+    let (pending_select, deselect_callback) = current_state.single();
     let Some(message_signal) = &pending_select.0 else { return; };
 
     match message_signal.status()
     {
-        bevy_simplenet::MessageStatus::Sending => (),
-        bevy_simplenet::MessageStatus::Sent    => (),  //don't clear it yet, wait for ack or disconnect
-        bevy_simplenet::MessageStatus::Failed  =>
+        bevy_simplenet::RequestStatus::Sending      => (),
+        bevy_simplenet::RequestStatus::Waiting      => (),
+        bevy_simplenet::RequestStatus::Responded    |
+        bevy_simplenet::RequestStatus::Acknowledged => (), //do nothing, wait for server message
+        _ =>
         {
-            commands.add(|world: &mut World| syscall(world, (), deselect_client_if_pending));
+            // an error occurred, roll back the predicted input
+            commands.add(deselect_callback.clone());
         }
     }
 }
@@ -374,12 +529,13 @@ fn main()
         .insert_resource(client)
         .insert_resource(ConnectionStatus::Connecting)
         .add_systems(Startup, setup)
-        .add_systems(PreUpdate, update_connection_status)
+        .add_systems(PreUpdate, handle_connection_changes)
         .add_systems(Update,
             (
                 handle_server_incoming,
                 check_pending_select,
                 refresh_status_text,
+                refresh_button_owner_text,
             ).chain()
         )
         .run();

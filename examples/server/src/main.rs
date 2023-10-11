@@ -4,6 +4,7 @@ use bevy_simplenet_common::*;
 //third-party shortcuts
 use bevy::app::*;
 use bevy::prelude::*;
+use bevy_kot::ecs::*;
 
 //standard shortcuts
 use std::collections::HashSet;
@@ -28,14 +29,54 @@ struct ClientConnections(HashSet<u128>);
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn update_client_connections(server: Res<DemoServer>, mut clients: ResMut<ClientConnections>)
+#[derive(Resource, Default)]
+struct ButtonState(Option<u128>);
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn setup(mut react_commands: ReactCommands)
 {
+    let _ = react_commands.add_resource_mutation_reactor::<ButtonState>(
+            move |world| { syscall(world, (), send_new_button_state); }
+        );
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn send_new_button_state(
+    server  : Res<DemoServer>,
+    clients : Res<ClientConnections>,
+    state   : Res<ReactRes<ButtonState>>,
+){
+    for client_id in clients.0.iter()
+    {
+        let _ = server.send(*client_id, DemoServerMsg::Current(state.0));
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn update_client_connections(
+    mut rcommands : ReactCommands,
+    server        : Res<DemoServer>,
+    mut clients   : ResMut<ClientConnections>,
+    mut state     : ResMut<ReactRes<ButtonState>>
+){
     while let Some(connection_report) = server.next_report()
     {
         match connection_report
         {
             bevy_simplenet::ServerReport::Connected(id, _) => { let _ = clients.0.insert(id); },
-            bevy_simplenet::ServerReport::Disconnected(id) => { let _ = clients.0.remove(&id); },
+            bevy_simplenet::ServerReport::Disconnected(id) =>
+            {
+                let _ = clients.0.remove(&id);
+
+                // clear the state if disconnected client held the button
+                if state.0 == Some(id) { *state.get_mut(&mut rcommands) = ButtonState::default(); }
+            },
         }
     }
 }
@@ -43,26 +84,48 @@ fn update_client_connections(server: Res<DemoServer>, mut clients: ResMut<Client
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn handle_client_incoming(server: Res<DemoServer>, clients: Res<ClientConnections>)
-{
-    while let Some((client_id, DemoClientVal::Msg(message))) = server.next_val()
-    {
-        match message
-        {
-            DemoClientMsg::Select =>
-            {
-                // ack the select
-                let _ = server.send(client_id, DemoServerMsg::AckSelect);
+fn handle_client_incoming(
+    mut rcommands : ReactCommands,
+    server        : Res<DemoServer>,
+    mut state     : ResMut<ReactRes<ButtonState>>
+){
+    let mut new_button_state = state.0;
 
-                // tell other clients to deselect
-                for other_client in clients.0.iter()
+    while let Some((client_id, client_val)) = server.next_val()
+    {
+        match client_val
+        {
+            DemoClientVal::Msg(()) => continue,
+            DemoClientVal::Request(request, token) =>
+            {
+                match request
                 {
-                    if *other_client == client_id { continue; };
-                    let _ = server.send(*other_client, DemoServerMsg::Deselect);
+                    DemoClientRequest::Select =>
+                    {
+                        // acknowldge selection
+                        let _ = server.acknowledge(token);
+
+                        // update button
+                        new_button_state = Some(client_id);
+                    }
+                    DemoClientRequest::GetState =>
+                    {
+                        // send current server state to client
+                        // - we must use new_button_state to ensure the order of events is preserved
+                        let current_state = new_button_state;
+                        let _ = server.respond(DemoServerResponse::Current(current_state), token);
+                    }
                 }
             }
         }
     }
+
+    // update button state if it changed
+    // - we do this at the end
+    //   A) so reactors aren't scheduled excessively
+    //   B) because reactors are deferred, so to get the right order of events we must do this last
+    if new_button_state == state.0 { return; }
+    *state.get_mut(&mut rcommands) = ButtonState(new_button_state);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -80,17 +143,25 @@ fn main()
             bevy_simplenet::ServerConfig::default(),
         );
 
-    // run server
-    App::empty()
+    // prep server
+    let mut app = App::empty();
+    app
         .add_event::<AppExit>()
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::from_millis(100)))
+        .add_plugins(ReactPlugin)
         .init_schedule(Main)
         .insert_resource(server)
         .init_resource::<ClientConnections>()
-        .add_systems(Main,
+        .insert_resource(ReactRes::new(ButtonState::default()));
+
+    // setup
+    syscall(&mut app.world, (), setup);
+
+    // run server
+    app.add_systems(Main,
             (
-                update_client_connections,
-                handle_client_incoming
+                update_client_connections, apply_deferred,
+                handle_client_incoming, apply_deferred,
             ).chain()
         )
         .run();

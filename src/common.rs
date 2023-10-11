@@ -1,5 +1,4 @@
 //local shortcuts
-use crate::*;
 
 //third-party shortcuts
 use serde::{Serialize, Deserialize};
@@ -11,6 +10,34 @@ use std::net::SocketAddr;
 //-------------------------------------------------------------------------------------------------------------------
 
 pub type SessionID = u128;
+
+//-------------------------------------------------------------------------------------------------------------------
+
+/// Indicates the current status of a client request.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum RequestStatus
+{
+    /// The request is sending.
+    Sending,
+    /// The request was sent and now we are waiting for a response.
+    ///
+    /// If disconnected while in this state, the request status will change to `ResponseLost` when the client reconnects.
+    Waiting,
+    /// The server responded to the request.
+    Responded,
+    /// The server acknowledged the request and will not respond.
+    Acknowledged,
+    /// The server rejected the request.
+    Rejected,
+    /// The request failed to send.
+    SendFailed,
+    /// The request was sent but the client disconnected from the server before we could receive a response.
+    ///
+    /// The request may have been responded to, acknowledged, or rejected, but we will never know.
+    ///
+    /// Note that if you drop the client, any waiting requests will be set to `ResponseLost`.
+    ResponseLost,
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -55,7 +82,7 @@ pub enum ServerVal<ServerMsg, ServerResponse>
 impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
 {
     /// Convert a server value into a request status.
-    pub(crate) fn into_request_status(&self) -> Option<(u64, RequestStatus)>
+    pub fn into_request_status(&self) -> Option<(u64, RequestStatus)>
     {
         match self
         {

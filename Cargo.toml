@@ -79,3 +79,25 @@ members = [
     "examples/common",
     "examples/server",
 ]
+
+[profile.release]
+lto           = true
+strip         = true    #minimize binary size with symbol stripping
+codegen-units = 1       #maximize performance
+
+[profile.release-small]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+
+[profile.release-small.package."*"]
+opt-level = "s"
+strip = true
+
+[profile.release-wasm]
+inherits = "release-small"
+panic    = "abort"
+
+[profile.release-wasm.package."*"]
+opt-level = "s"
+strip     = true

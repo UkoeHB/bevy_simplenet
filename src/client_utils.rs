@@ -93,34 +93,6 @@ pub enum ClientReport
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Indicates the current status of a client request.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum RequestStatus
-{
-    /// The request is sending.
-    Sending,
-    /// The request was sent and now we are waiting for a response.
-    ///
-    /// If disconnected while in this state, the request status will change to `ResponseLost` when the client reconnects.
-    Waiting,
-    /// The server responded to the request.
-    Responded,
-    /// The server acknowledged the request and will not respond.
-    Acknowledged,
-    /// The server rejected the request.
-    Rejected,
-    /// The request failed to send.
-    SendFailed,
-    /// The request was sent but the client disconnected from the server before we could receive a response.
-    ///
-    /// The request may have been responded to, acknowledged, or rejected, but we will never know.
-    ///
-    /// Note that if you drop the client, any waiting requests will be set to `ResponseLost`.
-    ResponseLost,
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
 #[derive(Clone, Debug)]
 pub(crate) struct RequestSignalInner
 {

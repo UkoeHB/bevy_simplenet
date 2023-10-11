@@ -1,29 +1,51 @@
-// path shortcuts
+//local shortcuts
+
+//third-party shortcuts
 use serde::{Deserialize, Serialize};
 
-/// Server messages
+//standard shortcuts
+
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DemoServerMsg
 {
-    AckSelect,
-    Deselect,
+    /// Updated current owner.
+    Current(Option<u128>),
 }
 
-/// Client messages
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum DemoClientMsg
+pub enum DemoServerResponse
 {
-    Select
+    /// Client that currently has selected the button.
+    Current(Option<u128>),
 }
 
-/// Package of messages.
+//-------------------------------------------------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum DemoClientRequest
+{
+    /// Select the button.
+    Select,
+    /// Request current server state.
+    GetState
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub struct DemoChannel;
 impl bevy_simplenet::ChannelPack for DemoChannel
 {
     type ConnectMsg = ();
-    type ClientMsg = DemoClientMsg;
-    type ClientRequest = ();
+    type ClientMsg = ();
+    type ClientRequest = DemoClientRequest;
     type ServerMsg = DemoServerMsg;
-    type ServerResponse = ();
+    type ServerResponse = DemoServerResponse;
 }
+
+//-------------------------------------------------------------------------------------------------------------------
