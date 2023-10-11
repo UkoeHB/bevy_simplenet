@@ -7,6 +7,7 @@ use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
@@ -44,8 +45,8 @@ fn socket_config(prevalidator: &ConnectionPrevalidator, client_env_type: EnvType
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-async fn websocket_handler<Msgs: MsgPack>(
-    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<Msgs>>>,
+async fn websocket_handler<Channel: ChannelPack>(
+    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<Channel>>>,
     axum::Extension(count)  : axum::Extension<ConnectionCounter>,
     axum::Extension(preval) : axum::Extension<Arc<ConnectionPrevalidator>>,
     ezsocket_upgrade        : ezsockets::axum::Upgrade,
@@ -87,51 +88,12 @@ async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Server-enforced constraints on client connections.
-#[derive(Debug, Copy, Clone)]
-pub struct ServerConfig
-{
-    /// Max number of concurrent client connections. Defaults to 100K.
-    pub max_connections: u32,
-    /// Max message size allowed from clients (bytes). Defaults to 1MB.
-    pub max_msg_size: u32,
-    /// Rate limit for messages received from a session. See [`RateLimitConfig`] for defaults.
-    pub rate_limit_config: RateLimitConfig,
-    /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
-    pub heartbeat_interval: Duration,
-    /// Duration after which a socket will shut down if the connection is inactive. Defaults to 10 seconds.
-    pub keepalive_timeout: Duration,
-}
-
-impl Default for ServerConfig
-{
-    fn default() -> ServerConfig
-    {
-        ServerConfig{
-                max_connections    : 100_000u32,
-                max_msg_size       : 1_000_000u32,
-                rate_limit_config  : RateLimitConfig::default(),
-                heartbeat_interval : Duration::from_secs(5),
-                keepalive_timeout  : Duration::from_secs(10),
-            }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Emitted by servers when a client connects/disconnects.
-#[derive(Debug, Clone)]
-pub enum ServerReport<ConnectMsg: Debug + Clone>
-{
-    Connected(SessionID, ConnectMsg),
-    Disconnected(SessionID)
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
+/// A server for communicating with clients.
+///
+/// Note that the server does not currently have a shut-down procedure other than closing the executable.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
-pub struct Server<Msgs: MsgPack>
+pub struct Server<Channel: ChannelPack>
 {
     /// the server's address
     server_address: SocketAddr,
@@ -142,12 +104,12 @@ pub struct Server<Msgs: MsgPack>
 
     /// sends messages to the internal connection handler
     server_val_sender: tokio::sync::mpsc::UnboundedSender<
-        SessionTargetMsg<SessionID, SessionCommandFromPack<Msgs>>
+        SessionTargetMsg<SessionID, SessionCommand<Channel>>
     >,
     /// receives reports from the internal connection handler
-    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<Msgs::ConnectMsg>>,
+    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<Channel::ConnectMsg>>,
     /// receives client messages from the internal connection handler
-    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientValFromPack<Msgs>>>,
+    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientVal<Channel>>>,
 
     /// signal indicates if server internal worker has stopped
     server_closed_signal: enfync::PendingResult<()>,
@@ -155,35 +117,86 @@ pub struct Server<Msgs: MsgPack>
     server_running_signal: enfync::PendingResult<()>,
 }
 
-impl<Msgs: MsgPack> Server<Msgs>
+impl<Channel: ChannelPack> Server<Channel>
 {
     /// Send a message to the target session.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
-    pub fn send(&self, id: SessionID, msg: Msgs::ServerMsg) -> Result<(), ()>
+    pub fn send(&self, id: SessionID, msg: Channel::ServerMsg) -> Result<(), ()>
     {
+        if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return Err(()); }
+
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
-        if self.is_dead()
-        {
-            tracing::warn!(id, "tried to send message to session but server is dead");
-            return Err(());
-        }
         if let Err(err) = self.server_val_sender.send(
-                SessionTargetMsg::new(id, SessionCommandFromPack::<Msgs>::Send(ServerValFromPack::<Msgs>::Msg(msg)))
+                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerVal::<Channel>::Msg(msg)))
             )
         {
-            tracing::error!(?err, "failed to forward session message to session");
+            tracing::error!(?err, "failed to forward message to session");
             return Err(());
         }
 
         Ok(())
     }
 
-    //todo: respond
+    /// Respond to a client request.
+    /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    /// - Returns `Err` if an internal server error occurs.
+    pub fn respond(&self, response: Channel::ServerResponse, token: RequestToken) -> Result<(), ()>
+    {
+        let client_id  = token.client_id();
+        let request_id = token.request_id();
+        if self.is_dead()
+        {
+            tracing::warn!(client_id, request_id, "tried to send response to session but server is dead");
+            return Err(());
+        }
 
-    //todo: acknowledge
+        // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
+        if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
+                client_id,
+                SessionCommand::<Channel>::Send(ServerVal::<Channel>::Response(response, token.take()))
+            ))
+        {
+            tracing::error!(?err, "failed to forward response to session");
+            return Err(());
+        }
 
-    //todo: reject request
+        Ok(())
+    }
+
+    /// Acknowledge a client request.
+    /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    /// - Returns `Err` if an internal server error occurs.
+    ///
+    /// An acknowledged request cannot be responded to.
+    pub fn acknowledge(&self, token: RequestToken) -> Result<(), ()>
+    {
+        let client_id  = token.client_id();
+        let request_id = token.request_id();
+        if self.is_dead()
+        {
+            tracing::warn!(client_id, request_id, "tried to send ack to session but server is dead");
+            return Err(());
+        }
+
+        // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
+        if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
+                client_id,
+                SessionCommand::<Channel>::Send(ServerVal::<Channel>::Ack(token.take()))
+            ))
+        {
+            tracing::error!(?err, "failed to forward ack to session");
+            return Err(());
+        }
+
+        Ok(())
+    }
+
+    /// Reject a client request.
+    pub fn reject(&self, _token: RequestToken)
+    {
+        // drop the token: rejection will happen automatically using the token's custom Drop
+    }
 
     /// Close the target session.
     ///
@@ -198,7 +211,7 @@ impl<Msgs: MsgPack> Server<Msgs>
             return Err(());
         }
         if let Err(err) = self.server_val_sender.send(
-                SessionTargetMsg::new(id, SessionCommandFromPack::<Msgs>::Close(close_frame))
+                SessionTargetMsg::new(id, SessionCommand::<Channel>::Close(close_frame))
             )
         {
             tracing::error!(?err, "failed to forward session close command to session");
@@ -209,7 +222,7 @@ impl<Msgs: MsgPack> Server<Msgs>
     }
 
     /// Try to get the next available connection report.
-    pub fn next_report(&self) -> Option<ServerReport<Msgs::ConnectMsg>>
+    pub fn next_report(&self) -> Option<ServerReport<Channel::ConnectMsg>>
     {
         //todo: count connections
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
@@ -217,7 +230,7 @@ impl<Msgs: MsgPack> Server<Msgs>
     }
 
     /// Try to extract the next available value from a client.
-    pub fn next_val(&self) -> Option<(SessionID, ClientValFromPack<Msgs>)>
+    pub fn next_val(&self) -> Option<(SessionID, ClientVal<Channel>)>
     {
         let Ok(msg) = self.client_val_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
@@ -244,7 +257,7 @@ impl<Msgs: MsgPack> Server<Msgs>
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Configuration for server's connection acceptor. Default is non-TLS.
+/// Configuration for the server's connection acceptor. Default is non-TLS.
 pub enum AcceptorConfig
 {
     Default,
@@ -259,13 +272,13 @@ pub enum AcceptorConfig
 /// Factory for producing servers that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
-pub struct ServerFactory<Msgs: MsgPack>
+pub struct ServerFactory<Channel: ChannelPack>
 {
     protocol_version : &'static str,
-    _phantom         : PhantomData<Msgs>,
+    _phantom         : PhantomData<Channel>,
 }
 
-impl<Msgs: MsgPack> ServerFactory<Msgs>
+impl<Channel: ChannelPack> ServerFactory<Channel>
 {
     /// Make a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
@@ -282,7 +295,7 @@ impl<Msgs: MsgPack> ServerFactory<Msgs>
         acceptor_config : AcceptorConfig,
         authenticator   : Authenticator,
         config          : ServerConfig
-    ) -> Server<Msgs>
+    ) -> Server<Channel>
     where
         A: std::net::ToSocketAddrs + Send + 'static,
     {
@@ -293,11 +306,11 @@ impl<Msgs: MsgPack> ServerFactory<Msgs>
         let (
                 connection_report_sender,
                 connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ServerReport<Msgs::ConnectMsg>>();
+            ) = crossbeam::channel::unbounded::<ServerReport<Channel::ConnectMsg>>();
         let (
                 client_val_sender,
                 client_val_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientValFromPack<Msgs>>>();
+            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientVal<Channel>>>();
 
         // prepare connection counter
         // - this is used to communication the current number of connections from the connection handler to the
@@ -311,7 +324,7 @@ impl<Msgs: MsgPack> ServerFactory<Msgs>
         let (server, server_worker) = enfync::blocking::extract(runtime_handle.spawn(async move {
                 ezsockets::Server::create(
                         move |_server|
-                        ConnectionHandler::<Msgs>{
+                        ConnectionHandler::<Channel>{
                                 config,
                                 connection_counter: connection_counter_clone,
                                 connection_report_sender,
@@ -342,7 +355,7 @@ impl<Msgs: MsgPack> ServerFactory<Msgs>
 
         // prepare router
         let app = axum::Router::new()
-            .route("/ws", axum::routing::get(websocket_handler::<Msgs>))
+            .route("/ws", axum::routing::get(websocket_handler::<Channel>))
             .layer(axum::Extension(server.clone()))
             .layer(axum::Extension(Arc::new(prevalidator)))
             .layer(axum::Extension(connection_counter.clone()));

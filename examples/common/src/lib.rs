@@ -18,8 +18,8 @@ pub enum DemoClientMsg
 
 /// Package of messages.
 #[derive(Debug, Clone)]
-pub struct DemoMsgPack;
-impl bevy_simplenet::MsgPack for DemoMsgPack
+pub struct DemoChannel;
+impl bevy_simplenet::ChannelPack for DemoChannel
 {
     type ConnectMsg = ();
     type ClientMsg = DemoClientMsg;

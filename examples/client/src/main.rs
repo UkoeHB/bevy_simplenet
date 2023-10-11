@@ -16,12 +16,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoClient = bevy_simplenet::Client::<DemoMsgPack>;
-type DemoServerVal = bevy_simplenet::ServerValFromPack<DemoMsgPack>;
+type DemoClient = bevy_simplenet::Client<DemoChannel>;
+type DemoServerVal = bevy_simplenet::ServerVal<DemoChannel>;
 
-fn client_factory() -> bevy_simplenet::ClientFactory<DemoMsgPack>
+fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 {
-    bevy_simplenet::ClientFactory::<DemoMsgPack>::new("demo")
+    bevy_simplenet::ClientFactory::<DemoChannel>::new("demo")
 }
 
 //-------------------------------------------------------------------------------------------------------------------

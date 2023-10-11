@@ -6,23 +6,14 @@ use bincode::Options;
 use serde::Deserialize;
 
 //standard shortcuts
+use std::sync::{Arc, AtomicBool, Ordering};
 use std::fmt::Debug;
 use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) type SessionHandlerFromPack<Msgs> = SessionHandler<
-        <Msgs as MsgPack>::ClientMsg,
-        <Msgs as MsgPack>::ClientRequest,
-    >;
-
-//-------------------------------------------------------------------------------------------------------------------
-
 #[derive(Debug)]
-pub(crate) struct SessionHandler<ClientMsg, ClientRequest>
-where
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+pub(crate) struct SessionHandler<Channel: ChannelPack>
 {
     /// id of this session
     pub(crate) id: SessionID,
@@ -30,7 +21,7 @@ where
     pub(crate) session: ezsockets::Session<SessionID, ()>,
     /// sender for forwarding messages from the session's client to the server
     pub(crate) client_val_sender: crossbeam::channel::Sender<
-        SessionSourceMsg<SessionID, ClientVal<ClientMsg, ClientRequest>>
+        SessionSourceMsg<SessionID, ClientVal<Channel>>
     >,
 
     /// config: maximum message size (bytes)
@@ -40,13 +31,22 @@ where
 
     /// rate limit tracker
     pub(crate) rate_limit_tracker: RateLimitTracker,
+
+    /// session wrapper for sending request rejections
+    pub(crate) request_rejector: Arc<dyn Fn(u64) + Send + Sync + 'static>,
+    /// tracks the lowest-encountered request id in order to help clients synchronize after reconnecting
+    pub(crate) earliest_request_id: Option<u64>,
+
+    /// Signal used to inform request tokens of the session's death, to avoid spuriously sending responses to new sessions
+    /// for requests made before a reconnect. Note that it is technically possible for a buffered response to be sent
+    /// to a client by a new session before a sync point is established, however old responses can never be sent after a
+    /// sync point, which ensures a client will never
+    /// receive a response after their request's status becomes [`RequestStatus::ResponseLost`].
+    pub(crate) death_signal: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
-impl<ClientMsg, ClientRequest> ezsockets::SessionExt for SessionHandler<ClientMsg, ClientRequest>
-where
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 {
     type ID   = SessionID;
     type Call = ();
@@ -133,11 +133,70 @@ where
             self.close("deserialization failure").await; return Ok(());
         };
 
-        // try to forward client message to session owner
-        if let Err(err) = self.client_val_sender.send(SessionSourceMsg::new(self.id, message))
+        // decide what to do with the message
+        match message
         {
-            tracing::error!(?err, "client msg sender is broken, closing session...");
-            self.close("session error").await; return Ok(());
+            ClientMeta::<Channel>::Msg(msg) =>
+            {
+                // try to forward client message to session owner
+                if let Err(err) = self.client_val_sender.send(
+                        SessionSourceMsg::new(self.id, ClientVal::<Channel>::Msg(msg))
+                    )
+                {
+                    tracing::debug!(?err, "client msg sender is broken, closing session...");
+                    self.close("session error").await; return Ok(());
+                }
+            }
+            ClientMeta::<Channel>::Request(request, request_id) =>
+            {
+                // register the request
+                // - clients should only be sending request ids that increase
+                if self.earliest_request_id.is_none()
+                {
+                    self.earliest_request_id = Some(request_id);
+                }
+
+                // prepare token
+                let token = RequestToken::new(
+                        self.id,
+                        request_id,
+                        self.request_rejector.clone(),
+                        self.death_signal.clone(),
+                    );
+
+                // try to forward client request to session owner
+                if let Err(err) = self.client_val_sender.send(
+                        SessionSourceMsg::new(self.id, ClientVal::<Channel>::Request(request, token))
+                    )
+                {
+                    tracing::debug!(?err, "client msg sender is broken, closing session...");
+                    self.close("session error").await; return Ok(());
+                }
+            }
+            ClientMeta::<Channel>::Sync(request) =>
+            {
+                // register the request
+                if self.earliest_request_id.is_none()
+                {
+                    self.earliest_request_id = Some(request.request_id);
+                }
+
+                // assemble sync response
+                let earliest_req = self.earliest_request_id.unwrap();
+                let sync_response = ServerMeta::<Channel>::Sync(SyncResponse{ request, earliest_req });
+
+                // serialize message
+                tracing::trace!(self.id, "sending sync response to session");
+                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&sync_response)
+                else { tracing::error!(self.id, "serializing sync response failed"); return Ok(()); };
+
+                // send sync response to client
+                if let Err(_) = self.session.binary(ser_msg)
+                {
+                    tracing::debug!(self.id, "dropping sync response sent to broken session");
+                    self.close("session error").await; return Ok(());
+                }
+            }
         }
 
         Ok(())
@@ -151,10 +210,7 @@ where
     }
 }
 
-impl<ClientMsg, ClientRequest> SessionHandler<ClientMsg, ClientRequest>
-where
-    ClientMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ClientRequest: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+impl<Channel: ChannelPack> SessionHandler<Channel>
 {
     /// Close the session
     async fn close(&mut self, reason: &str)
@@ -170,6 +226,14 @@ where
         {
             tracing::error!(self.id, "failed closing session");
         }
+    }
+}
+
+impl<Channel: ChannelPack> Drop for SessionHandler<Channel>
+{
+    fn drop(&mut self)
+    {
+        self.death_signal.store(true, Ordering::Relaxed);
     }
 }
 

@@ -11,12 +11,12 @@ use std::collections::HashSet;
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoServer = bevy_simplenet::Server::<DemoMsgPack>;
-type DemoClientVal = bevy_simplenet::ClientValFromPack<DemoMsgPack>;
+type DemoServer = bevy_simplenet::Server<DemoChannel>;
+type DemoClientVal = bevy_simplenet::ClientVal<DemoChannel>;
 
-fn server_factory() -> bevy_simplenet::ServerFactory<DemoMsgPack>
+fn server_factory() -> bevy_simplenet::ServerFactory<DemoChannel>
 {
-    bevy_simplenet::ServerFactory::<DemoMsgPack>::new("demo")
+    bevy_simplenet::ServerFactory::<DemoChannel>::new("demo")
 }
 
 //-------------------------------------------------------------------------------------------------------------------

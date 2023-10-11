@@ -6,82 +6,39 @@ use bincode::Options;
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::sync::{Arc, AtomicBool};
 use std::collections::HashMap;
 
 //-------------------------------------------------------------------------------------------------------------------
-
-/// Errors emitted by `ConnectionHandler`
-#[derive(Debug, Clone)]
-pub enum ConnectionError
-{
-    SystemError,
-}
-
-impl std::fmt::Display for ConnectionError
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
-        let _ = write!(f, "ConnectionError::");
-        match self
-        {
-            ConnectionError::SystemError => write!(f, "SystemError"),
-        }
-    }
-}
-impl std::error::Error for ConnectionError {}
-
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub(crate) struct SessionTargetMsg<I: Debug + Clone, T: Debug + Clone>
-{
-    pub(crate) id  : I,
-    pub(crate) msg : T
-}
+fn reject_client_request<Channel: ChannelPack>(
+    session    : &ezsockets::Session<SessionID, ()>,
+    session_id : SessionID,
+    request_id : u64
+){
+    // pack the message
+    let packed_msg = ServerMeta::<Channel>::Val(
+            ServerVal::<Channel>::Reject(request_id)
+        );
 
-impl<I: Debug + Clone, T: Debug + Clone> SessionTargetMsg<I, T>
-{
-    pub(crate) fn new(id: I, msg: T) -> SessionTargetMsg<I, T> { SessionTargetMsg::<I, T> { id, msg } }
+    // serialize message
+    tracing::trace!(session_id, "sending request rejection to session");
+    let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&packed_msg)
+    else { tracing::error!(session_id, "serializing rejection failed"); return; };
+
+    // forward server message to target session
+    // - this may fail if the session is disconnected
+    if let Err(_) = session.binary(ser_msg)
+    { tracing::debug!(session_id, "dropping request rejection sent to broken session"); }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub(crate) struct SessionSourceMsg<I: Debug + Clone, T: Debug + Clone>
-{
-    pub(crate) id  : I,
-    pub(crate) msg : T
-}
-
-impl<I: Debug + Clone, T: Debug + Clone> SessionSourceMsg<I, T>
-{
-    pub(crate) fn new(id: I, msg: T) -> SessionSourceMsg<I, T> { SessionSourceMsg::<I, T> { id, msg } }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub(crate) enum SessionCommand<ServerMsg, ServerResponse>
-where
-    ServerMsg: Clone + Debug + Send + Sync,
-    ServerResponse: Clone + Debug + Send + Sync,
-{
-    Send(ServerVal<ServerMsg, ServerResponse>),
-    Close(ezsockets::CloseFrame)
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-pub(crate) type SessionCommandFromPack<Msgs> = SessionCommand<
-        <Msgs as MsgPack>::ServerMsg,
-        <Msgs as MsgPack>::ServerResponse,
-    >;
-
 //-------------------------------------------------------------------------------------------------------------------
 
 //todo: shut down procedure (implementation currently assumes the server lives until the executable closes)
 #[derive(Debug)]
-pub(crate) struct ConnectionHandler<Msgs: MsgPack>
+pub(crate) struct ConnectionHandler<Channel: ChannelPack>
 {
     /// config: maximum message size (bytes)
     pub(crate) config: ServerConfig,
@@ -90,20 +47,20 @@ pub(crate) struct ConnectionHandler<Msgs: MsgPack>
 
     /// sender endpoint for reporting connection events
     /// - receiver is in server owner
-    pub(crate) connection_report_sender: crossbeam::channel::Sender<ServerReport<Msgs::ConnectMsg>>,
+    pub(crate) connection_report_sender: crossbeam::channel::Sender<ServerReport<Channel::ConnectMsg>>,
     /// registered sessions
     pub(crate) session_registry: HashMap<SessionID, ezsockets::Session<SessionID, ()>>,
 
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
-    pub(crate) client_val_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientValFromPack<Msgs>>>,
+    pub(crate) client_val_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientVal<Channel>>>,
 }
 
 #[async_trait::async_trait]
-impl<Msgs: MsgPack> ezsockets::ServerExt for ConnectionHandler<Msgs>
+impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 {
-    type Session = SessionHandlerFromPack<Msgs>;  //Self::Session, not ezsockets::Session
-    type Call    = SessionTargetMsg<SessionID, SessionCommandFromPack<Msgs>>;
+    type Session = SessionHandler<Channel>;  //Self::Session, not ezsockets::Session
+    type Call    = SessionTargetMsg<SessionID, SessionCommand<Channel>>;
 
     /// Produces server sessions for new connections.
     async fn on_connect(
@@ -128,7 +85,7 @@ impl<Msgs: MsgPack> ezsockets::ServerExt for ConnectionHandler<Msgs>
 
         // report the new connection
         if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<Msgs::ConnectMsg>::Connected(info.id, info.connect_msg)
+                ServerReport::<Channel::ConnectMsg>::Connected(info.id, info.connect_msg)
             )
         {
             tracing::error!(?err, "forwarding connection report failed");
@@ -142,23 +99,36 @@ impl<Msgs: MsgPack> ezsockets::ServerExt for ConnectionHandler<Msgs>
         self.connection_counter.increment();
 
         // make a session
+        let session_id        = info.id;
         let client_val_sender = self.client_val_sender.clone();
-        let max_msg_size         = self.config.max_msg_size;
-        let rate_limit_config    = self.config.rate_limit_config.clone();
+        let max_msg_size      = self.config.max_msg_size;
+        let rate_limit_config = self.config.rate_limit_config.clone();
 
         let session = ezsockets::Session::create(
                 move | session |
                 {
-                    SessionHandlerFromPack::<Msgs>{
-                            id: info.id,
+                    // prep client request rejector
+                    let session_clone = session.clone();
+                    let request_rejector =
+                        move | request_id: u64 |
+                        {
+                            reject_client_request(&session_clone, session_id, request_id);
+                        };
+
+                    // make session handler
+                    SessionHandler::<Channel>{
+                            id: session_id,
                             session,
                             client_val_sender,
                             max_msg_size,
                             client_env_type: info.client_env_type,
-                            rate_limit_tracker: RateLimitTracker::new(rate_limit_config)
+                            rate_limit_tracker: RateLimitTracker::new(rate_limit_config),
+                            request_rejector: Arc::new(request_rejector),
+                            earliest_request_id: None,
+                            death_signal: Arc::new(AtomicBool::new(false)),
                         }
                 },
-                info.id,
+                session_id,
                 socket
             );
 
@@ -182,7 +152,7 @@ impl<Msgs: MsgPack> ezsockets::ServerExt for ConnectionHandler<Msgs>
 
         // send disconnect report
         if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<Msgs::ConnectMsg>::Disconnected(id)
+                ServerReport::<Channel::ConnectMsg>::Disconnected(id)
             )
         {
             tracing::error!(?err, "forwarding disconnect report failed");
@@ -195,37 +165,44 @@ impl<Msgs: MsgPack> ezsockets::ServerExt for ConnectionHandler<Msgs>
     /// Responds to calls to the server connected to this handler (i.e. ezsockets::Server::call()).
     async fn on_call(
         &mut self,
-        session_msg: SessionTargetMsg<SessionID, SessionCommandFromPack<Msgs>>
+        session_msg: SessionTargetMsg<SessionID, SessionCommand<Channel>>
     ) -> Result<(), ezsockets::Error>
     {
         // try to get targeted session (ignore if missing)
         let Some(session) = self.session_registry.get(&session_msg.id)
         else
         {
-            tracing::warn!(session_msg.id, "dropping message sent to unknown session");
+            tracing::debug!(session_msg.id, "dropping message sent to unknown session");
             return Ok(());
         };
 
         // handle input
         match session_msg.msg
         {
-            SessionCommandFromPack::<Msgs>::Send(msg_to_send) =>
+            //todo: consider marshalling the message into the session via Session::call() so the session's
+            //      thread can do serializing instead of the connection handler which is a bottleneck
+            SessionCommand::<Channel>::Send(msg_to_send) =>
             {
+                // pack the message
+                let packed_msg = ServerMeta::<Channel>::Val(msg_to_send);
+
                 // serialize message
                 tracing::trace!(session_msg.id, "sending message to session");
-                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&msg_to_send)
+                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&packed_msg)
                 else { tracing::error!(session_msg.id, "serializing message failed"); return Ok(()); };
 
                 // forward server message to target session
+                // - this may fail if the session is disconnected
                 if let Err(_) = session.binary(ser_msg)
-                { tracing::error!(session_msg.id, "dropping message sent to broken session"); }
+                { tracing::debug!(session_msg.id, "dropping message sent to broken session"); }
             }
-            SessionCommandFromPack::<Msgs>::Close(close_frame) =>
+            SessionCommand::<Channel>::Close(close_frame) =>
             {
                 // command the target session to close
+                // - this may fail if the session is disconnected
                 tracing::info!(session_msg.id, "closing session");
-                if let Err(_) = session.close(Some(close_frame)).await
-                { tracing::error!(session_msg.id, "failed closing session"); }
+                if let Err(_) = session.close(Some(close_frame)).await  //todo: don't await here
+                { tracing::debug!(session_msg.id, "failed closing session"); }
             }
         }
 

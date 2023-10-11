@@ -7,38 +7,30 @@ use serde::Deserialize;
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::sync::{Arc, Mutex};
 use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) type ClientHandlerFromPack<Msgs> = ClientHandler<
-        <Msgs as MsgPack>::ServerMsg,
-        <Msgs as MsgPack>::ServerResponse,
-    >;
-
-//-------------------------------------------------------------------------------------------------------------------
-
 #[derive(Debug)]
-pub(crate) struct ClientHandler<ServerMsg, ServerResponse>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+pub(crate) struct ClientHandler<Channel: ChannelPack>
 {
     /// config
     pub(crate) config: ClientConfig,
     /// core websockets client
-    pub(crate) client: ezsockets::Client<ClientHandler<ServerMsg, ServerResponse>>,
+    pub(crate) client: ezsockets::Client<ClientHandler<Channel>>,
     /// collects connection events
     pub(crate) connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// collects messages from the server
-    pub(crate) server_val_sender: crossbeam::channel::Sender<ServerVal<ServerMsg, ServerResponse>>,
+    pub(crate) server_val_sender: crossbeam::channel::Sender<ServerVal<Channel>>,
+    /// synchronized tracker for pending requests
+    pub(crate) pending_requests: Arc<Mutex<PendingRequestTracker>>,
+    /// tracks the most recently acknowledged sync point (the lowest request id that the server is currently aware of)
+    pub(crate) last_acked_sync_point: u64,
 }
 
 #[async_trait::async_trait]
-impl<ServerMsg, ServerResponse> ezsockets::ClientExt for ClientHandler<ServerMsg, ServerResponse>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
 {
     type Call = ();
 
@@ -95,14 +87,43 @@ where
         else
         {
             tracing::warn!("received server msg that failed to deserialize");
-            return Ok(());  //ignore it
+            return Ok(());
         };
 
-        // forward to client owner
-        if let Err(err) = self.server_val_sender.send(server_msg)
+        // decide how to handle the message
+        match server_msg
         {
-            tracing::error!(?err, "failed to forward server msg to client");
-            return Err(Box::new(ClientError::SendError));  //client is broken
+            ServerMeta::<Channel>::Val(msg) =>
+            {
+                // handle pending request meta
+                if let Some((request_id, request_status)) = msg.into_request_status()
+                {
+                    // clean up pending request
+                    self.pending_requests.lock().set_status_and_remove(request_id, request_status);
+
+                    // discard message if request id is below the latest acknowledged sync point
+                    if request_id < self.last_acked_sync_point
+                    {
+                        // this should never happen, but there is technically at least one race condition in the server
+                        // that **could** lead to this branch if the stars align
+                        tracing::warn!("ignoring server response that somehow got past a sync point");
+                        return Ok(());
+                    }
+                }
+
+                // forward to client owner
+                if let Err(err) = self.server_val_sender.send(msg)
+                {
+                    tracing::error!(?err, "failed to forward server msg to client");
+                    return Err(Box::new(ClientError::SendError));
+                }
+            }
+            ServerMeta::<Channel>::Sync(response) =>
+            {
+                // clean up pending requests
+                self.pending_requests.lock().handle_sync_response(response);
+                self.last_acked_sync_point = std::cmp::max(response.earliest_req, self.last_acked_sync_point);
+            }
         }
 
         Ok(())
@@ -121,14 +142,19 @@ where
     /// Respond to the client acquiring a connection.
     async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
-        // forward event to client owner
+        // make sync request if there are pending requests
+        self.pending_requests.lock().try_make_sync_request(&self.client);
+
+        // forward connection event to client owner
         if let Err(err) = self.connection_report_sender.send(ClientReport::Connected)
         {
             tracing::error!(?err, "failed to forward connection event to client");
-            return Err(Box::new(ClientError::SendError));  //client is broken
+            return Err(Box::new(ClientError::SendError));
         }
         Ok(())
     }
+
+    //todo: on_connect_fail() (need ezsockets update)
 
     /// Respond to the client being disconnected.
     async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
@@ -139,7 +165,7 @@ where
         if let Err(err) = self.connection_report_sender.send(ClientReport::Disconnected)
         {
             tracing::error!(?err, "failed to forward connection event to client");
-            return Err(Box::new(ClientError::SendError));  //client is broken
+            return Err(Box::new(ClientError::SendError));
         }
 
         // choose response
@@ -162,7 +188,7 @@ where
         if let Err(err) = self.connection_report_sender.send(ClientReport::ClosedByServer(close_frame))
         {
             tracing::error!(?err, "failed to forward connection event to client");
-            return Err(Box::new(ClientError::SendError));  //client is broken
+            return Err(Box::new(ClientError::SendError));
         }
 
         // choose response
@@ -174,10 +200,7 @@ where
     }
 }
 
-impl<ServerMsg, ServerResponse> Drop for ClientHandler<ServerMsg, ServerResponse>
-where
-    ServerMsg: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
-    ServerResponse: Clone + Debug + Send + Sync + for<'de> Deserialize<'de>,
+impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
 {
     fn drop(&mut self)
     {

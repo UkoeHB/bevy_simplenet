@@ -9,81 +9,62 @@ use std::net::SocketAddr;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) const VERSION_MSG_KEY : &'static str = "v";
-pub(crate) const TYPE_MSG_KEY    : &'static str = "t";
-pub(crate) const AUTH_MSG_KEY    : &'static str = "a";
-pub(crate) const CONNECT_MSG_KEY : &'static str = "c";
-
-//-------------------------------------------------------------------------------------------------------------------
-
 pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Represents the message types that can be sent between a client and server.
-pub trait MsgPack: Debug + 'static
+pub trait ChannelPack: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static
 {
     /// A client sends this to a server as part of connection requests.
+    ///
+    /// Note that a client's connect message is defined when creating the client and can't be modified for
+    /// reconnect attempts.
     type ConnectMsg: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
-
-    /// A client one-shot message.
-    type ClientMsg: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
-    /// A client request, the server should send a response or acknowledge it.
-    type ClientRequest: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
 
     /// A server one-shot message.
     type ServerMsg: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
     /// A server response to a client request.
     type ServerResponse: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
+
+    /// A client one-shot message.
+    type ClientMsg: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
+    /// A client request. The server may respond to it, acknowledge it, or reject it.
+    type ClientRequest: Clone + Debug + Send + Sync + Serialize + for<'de> Deserialize<'de> + 'static;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// A server message that may be received by a client.
+/// A server value that may be received by a client.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum ServerVal<ServerMsg, ServerResponse>
-where
-    ServerMsg: Clone + Debug + Send + Sync,
-    ServerResponse: Clone + Debug + Send + Sync,
+pub enum ServerVal<Channel: ChannelPack>
 {
     /// A one-shot server message.
-    Msg(ServerMsg),
-    /// A response to a client request with the given id.
-    Response(ServerResponse, u64),
-    /// Acknowledges receiving a client request with the given id.
+    Msg(Channel::ServerMsg),
+    /// A response to a client request.
+    Response(Channel::ServerResponse, u64),
+    /// Acknowledges receiving a client request.
     ///
-    /// Will not be followed by a subsequent response (you either get a response or an ack).
+    /// Will not be followed by a subsequent response (you either get a response, ack, or rejection).
     Ack(u64),
+    /// Rejects a client request.
+    Reject(u64),
 }
 
-//-------------------------------------------------------------------------------------------------------------------
-
-pub type ServerValFromPack<Msgs> = ServerVal<
-        <Msgs as MsgPack>::ServerMsg,
-        <Msgs as MsgPack>::ServerResponse,
-    >;
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// A client message that may be received by a server.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum ClientVal<ClientMsg, ClientRequest>
-where
-    ClientMsg: Clone + Debug + Send + Sync,
-    ClientRequest: Clone + Debug + Send + Sync,
+impl ServerVal<Channel: ChannelPack>
 {
-    /// A one-shot client message.
-    Msg(ClientMsg),
-    /// A request the server should reply to with a response or ack.
-    Request(ClientRequest, u64),
+    /// Convert a server value into a request status.
+    pub(crate) fn into_request_status(&self) -> Option<(u64, RequestStatus)>
+    {
+        match self
+        {
+            Self::Msg(_)          => None,
+            Self::Response(_, id) => Some((id, RequestStatus::Responded)),
+            Self::Ack(id)         => Some((id, RequestStatus::Acknowledged)),
+            Self::Reject(id)      => Some((id, RequestStatus::Rejected)),
+        }
+    }
 }
-
-//-------------------------------------------------------------------------------------------------------------------
-
-pub type ClientValFromPack<Msgs> = ClientVal<
-        <Msgs as MsgPack>::ClientMsg,
-        <Msgs as MsgPack>::ClientRequest,
-    >;
 
 //-------------------------------------------------------------------------------------------------------------------
 

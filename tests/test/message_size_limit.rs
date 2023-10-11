@@ -22,8 +22,8 @@ pub struct DemoClientMsg(pub String);
 pub struct DemoConnectMsg(pub String);
 
 #[derive(Debug, Clone)]
-pub struct DemoMsgPack;
-impl bevy_simplenet::MsgPack for DemoMsgPack
+pub struct DemoChannel;
+impl bevy_simplenet::ChannelPack for DemoChannel
 {
     type ConnectMsg = DemoConnectMsg;
     type ClientMsg = DemoClientMsg;
@@ -32,19 +32,19 @@ impl bevy_simplenet::MsgPack for DemoMsgPack
     type ServerResponse = ();
 }
 
-type _DemoServer = bevy_simplenet::Server::<DemoMsgPack>;
-type _DemoClient = bevy_simplenet::Client::<DemoMsgPack>;
-type _DemoServerVal = bevy_simplenet::ServerValFromPack<DemoMsgPack>;
-type _DemoClientVal = bevy_simplenet::ClientValFromPack<DemoMsgPack>;
+type _DemoServer = bevy_simplenet::Server<DemoChannel>;
+type _DemoClient = bevy_simplenet::Client<DemoChannel>;
+type _DemoServerVal = bevy_simplenet::ServerVal<DemoChannel>;
+type _DemoClientVal = bevy_simplenet::ClientVal<DemoChannel>;
 
-fn server_demo_factory() -> bevy_simplenet::ServerFactory<DemoMsgPack>
+fn server_demo_factory() -> bevy_simplenet::ServerFactory<DemoChannel>
 {
-    bevy_simplenet::ServerFactory::<DemoMsgPack>::new("test")
+    bevy_simplenet::ServerFactory::<DemoChannel>::new("test")
 }
 
-fn client_demo_factory() -> bevy_simplenet::ClientFactory<DemoMsgPack>
+fn client_demo_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 {
-    bevy_simplenet::ClientFactory::<DemoMsgPack>::new("test")
+    bevy_simplenet::ClientFactory::<DemoChannel>::new("test")
 }
 
 //-------------------------------------------------------------------------------------------------------------------

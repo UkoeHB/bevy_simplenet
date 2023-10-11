@@ -7,129 +7,57 @@ use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
+use std::atomic::AtomicU8;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub type MessageSignal = ezsockets::MessageSignal;
-pub type MessageStatus = ezsockets::MessageStatus;
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Errors emitted by `ClientHandler`
-#[derive(Debug)]
-pub enum ClientError
-{
-    //ClosedByServer,
-    SendError
-}
-
-impl std::fmt::Display for ClientError
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
-        let _ = write!(f, "ClientError::");
-        match self
-        {
-            //ClientError::ClosedByServer => write!(f, "ClosedByServer"),
-            ClientError::SendError      => write!(f, "SendError"),
-        }
-    }
-}
-impl std::error::Error for ClientError {}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Config controlling how clients respond to connection events
-#[derive(Debug)]
-pub struct ClientConfig
-{
-    /// Try to reconnect if the client is disconnected. Defaults to `true`.
-    pub reconnect_on_disconnect: bool,
-    /// Try to reconnect if the client is closed by the server. Defaults to `false`.
-    pub reconnect_on_server_close: bool,
-    /// Reconnect interval (delay between reconnect attempts). Defaults to 2 seconds.
-    pub reconnect_interval: Duration,
-    /// Maximum number of connection attempts when initially connecting. Defaults to infinite.
-    pub max_initial_connect_attempts: usize,
-    /// Maximum number of reconnect attempts when reconnecting. Defaults to infinite.
-    pub max_reconnect_attempts: usize,
-    /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
-    pub heartbeat_interval: Duration,
-    /// Duration after which a socket will shut down if the connection is inactive. Defaults to 10 seconds
-    pub keepalive_timeout: Duration,
-}
-
-impl Default for ClientConfig
-{
-    fn default() -> ClientConfig
-    {
-        ClientConfig{
-                reconnect_on_disconnect      : true,
-                reconnect_on_server_close    : false,
-                reconnect_interval           : Duration::from_secs(2),
-                max_initial_connect_attempts : usize::MAX,
-                max_reconnect_attempts       : usize::MAX,
-                heartbeat_interval           : Duration::from_secs(5),
-                keepalive_timeout            : Duration::from_secs(10),
-            }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Emitted by clients when they connect/disconnect/shut down.
-#[derive(Debug, Clone)]
-pub enum ClientReport
-{
-    Connected,
-    Disconnected,
-    ClosedByServer(Option<ezsockets::CloseFrame>),
-    ClosedBySelf,
-    IsDead,
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
+/// A client for communicating with a server.
+///
+/// It is safe to drop a client, however if you need a complete shut-down procedure then follow these steps:
+/// 1) Call [`Client::close()`].
+/// 2) Wait for [`Client::is_dead()`] to return true. Note that on WASM targets you cannot busy-wait since doing so
+///    will block the client backend.
+/// 3) Call [`Client::next_val()`] to drain any lingering server values.
+/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`]).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
-pub struct Client<Msgs: MsgPack>
+pub struct Client<Channel: ChannelPack>
 {
     /// this client's id
     client_id: u128,
     /// core websockets client
-    client: ezsockets::Client<ClientHandlerFromPack<Msgs>>,
+    client: ezsockets::Client<ClientHandler<Channel>>,
     /// sender for connection events (used for 'closed by self')
     connection_report_sender: crossbeam::channel::Sender<ClientReport>,
     /// receiver for connection events
     connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
     /// receiver for messages sent by the server
-    server_val_receiver: crossbeam::channel::Receiver<ServerValFromPack<Msgs>>,
+    server_val_receiver: crossbeam::channel::Receiver<ServerVal<Channel>>,
     /// signal for when the internal client is shut down
     client_closed_signal: enfync::PendingResult<()>,
+    /// synchronized tracker for pending requests
+    pending_requests: Arc<Mutex<PendingRequestTracker>>,
 }
 
-impl<Msgs: MsgPack> Client<Msgs>
+impl<Channel: ChannelPack> Client<Channel>
 {
-    /// Send message to server.
+    /// Send a one-shot message to the server.
     ///
-    /// Returns `Ok(ezsockets::MessageSignal)` on success. The signal can be used to track the message status. Messages
+    /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
     /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
     /// after this returns `Err`).
-    pub fn send(&self, msg: Msgs::ClientMsg) -> Result<ezsockets::MessageSignal, ()>
+    pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
     {
-        if self.is_dead()
-        {
-            tracing::warn!("tried to send message to dead client");
-            return Err(());
-        }
+        if self.is_dead() { tracing::warn!("tried to send message to dead client"); return Err(()); }
 
         // forward message to server
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientValFromPack::<Msgs>::Msg(msg))
-        else { return Err(()); };
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMeta::<Channel>::Msg(msg))
+        else { tracing::error!("failed serializing client message"); return Err(()); };
 
         match self.client.binary(ser_msg)
         {
@@ -142,7 +70,42 @@ impl<Msgs: MsgPack> Client<Msgs>
         }
     }
 
-    //todo: send request to server
+    /// Send a request to the server.
+    ///
+    /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Messages
+    /// will fail if the underlying client becomes disconnected. If a reconnect cycle is very short then a pending request
+    /// may complete successfully, but most of the time pending requests will fail after a disconnect.
+    ///
+    /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
+    /// after this returns `Err`).
+    pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
+    {
+        if self.is_dead() { tracing::warn!("tried to send request to dead client"); return Err(()); }
+
+        // prep request id
+        let mut pending_requests = self.pending_requests.lock();
+        let request_id = pending_requests.reserve_id();
+
+        // forward message to server
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
+                &ClientMeta::<Channel>::Request(request, request_id)
+            )
+        else { tracing::error!("failed serializing client request"); return Err(()); };
+
+        match self.client.binary(ser_msg)
+        {
+            Ok(signal) =>
+            {
+                let request_signal = pending_requests.add_request(request_id, signal);
+                Ok(request_signal)
+            }
+            Err(_) =>
+            {
+                tracing::warn!("tried to send request to dead client");
+                Err(())
+            }
+        }
+    }
 
     /// Try to get the next client report.
     pub fn next_report(&self) -> Option<ClientReport>
@@ -152,7 +115,9 @@ impl<Msgs: MsgPack> Client<Msgs>
     }
 
     /// Try to get the next server value.
-    pub fn next_val(&self) -> Option<ServerValFromPack<Msgs>>
+    ///
+    /// If the client is dead, you can safely use this to drain any lingering server values.
+    pub fn next_val(&self) -> Option<ServerVal<Channel::ServerMsg, Channel::ServerResponse>>
     {
         let Ok(msg) = self.server_val_receiver.try_recv() else { return None; };
         Some(msg)
@@ -204,7 +169,7 @@ impl<Msgs: MsgPack> Client<Msgs>
     }
 }
 
-impl<Msgs: MsgPack> Drop for Client<Msgs>
+impl<Channel: ChannelPack> Drop for Client<Channel>
 {
     fn drop(&mut self)
     {
@@ -218,13 +183,13 @@ impl<Msgs: MsgPack> Drop for Client<Msgs>
 /// Factory for producing servers that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
-pub struct ClientFactory<Msgs: MsgPack>
+pub struct ClientFactory<Channel: ChannelPack>
 {
     protocol_version : &'static str,
-    _phantom         : PhantomData<Msgs>,
+    _phantom         : PhantomData<Channel>,
 }
 
-impl<Msgs: MsgPack> ClientFactory<Msgs>
+impl<Channel: ChannelPack> ClientFactory<Channel>
 {
     /// Make a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
@@ -238,8 +203,8 @@ impl<Msgs: MsgPack> ClientFactory<Msgs>
         url            : url::Url,
         auth           : AuthRequest,
         config         : ClientConfig,
-        connect_msg    : Msgs::ConnectMsg,
-    ) -> Client<Msgs>
+        connect_msg    : Channel::ConnectMsg,
+    ) -> Client<Channel>
     {
         // prepare to make client connection
         // note: urls cannot contain raw bytes so we must serialize as json
@@ -273,7 +238,7 @@ impl<Msgs: MsgPack> ClientFactory<Msgs>
                 connection_report_sender,
                 connection_report_receiver
             ) = crossbeam::channel::unbounded::<ClientReport>();
-        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerValFromPack<Msgs>>();
+        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerVal<Channel>>();
 
         // prepare client connector
         let client_connector = {
@@ -286,14 +251,18 @@ impl<Msgs: MsgPack> ClientFactory<Msgs>
 
         // make client core with our handler
         let connection_report_sender_clone = connection_report_sender.clone();
+        let pending_requests = Arc::new(Mutex::new(PendingRequestTracker::default()));
+        let pending_requests_clone = pending_requests.clone();
         let (client, mut client_task_handle) = ezsockets::connect_with(
                 move |client|
                 {
-                    ClientHandlerFromPack::<Msgs>{
+                    ClientHandler::<Channel>{
                             config,
                             client,
                             connection_report_sender: connection_report_sender_clone,
-                            server_val_sender
+                            server_val_sender,
+                            pending_requests: pending_requests_clone,
+                            last_acked_sync_point: 0u64,
                         }
                 },
                 client_config,
@@ -323,6 +292,7 @@ impl<Msgs: MsgPack> ClientFactory<Msgs>
                 connection_report_receiver,
                 server_val_receiver,
                 client_closed_signal,
+                pending_requests,
             }
     }
 }

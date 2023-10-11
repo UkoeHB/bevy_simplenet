@@ -43,41 +43,41 @@ use std::time::Duration;
 
 // define a channel
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TestConnectMsg(pub String);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestServerMsg(pub u64);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestClientMsg(pub u64);
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TestConnectMsg(pub String);
-
 #[derive(Debug, Clone)]
-pub struct TestMsgPack;
-impl bevy_simplenet::MsgPack for TestMsgPack
+pub struct TestChannel;
+impl bevy_simplenet::ChannelPack for TestChannel
 {
     type ConnectMsg = TestConnectMsg;
-    type ClientMsg = TestClientMsg;
-    type ClientRequest = ();
     type ServerMsg = TestServerMsg;
     type ServerResponse = ();
+    type ClientMsg = TestClientMsg;
+    type ClientRequest = ();
 }
 
-type TestServer = bevy_simplenet::Server::<TestMsgPack>;
-type TestClient = bevy_simplenet::Client::<TestMsgPack>;
-type TestServerVal = bevy_simplenet::ServerValFromPack<TestMsgPack>;
-type TestClientVal = bevy_simplenet::ClientValFromPack<TestMsgPack>;
+type TestServer = bevy_simplenet::Server<TestChannel>;
+type TestClient = bevy_simplenet::Client<TestChannel>;
+type TestServerVal = bevy_simplenet::ServerVal<TestChannel>;
+type TestClientVal = bevy_simplenet::ClientVal<TestChannel>;
 
-fn server_factory() -> bevy_simplenet::ServerFactory<TestMsgPack>
+fn server_factory() -> bevy_simplenet::ServerFactory<TestChannel>
 {
     // It is recommended to make server/client factories with baked-in protocol versions (e.g.
     //   with env!("CARGO_PKG_VERSION")).
-    bevy_simplenet::ServerFactory::<TestMsgPack>::new("test")
+    bevy_simplenet::ServerFactory::<TestChannel>::new("test")
 }
 
-fn client_factory() -> bevy_simplenet::ClientFactory<TestMsgPack>
+fn client_factory() -> bevy_simplenet::ClientFactory<TestChannel>
 {
     // You must use the same protocol version string as the server.
-    bevy_simplenet::ClientFactory::<TestMsgPack>::new("test")
+    bevy_simplenet::ClientFactory::<TestChannel>::new("test")
 }
 
 
@@ -129,18 +129,19 @@ assert_eq!(connect_msg.0, String::from("hello"));
 
 // send message: client -> server
 let signal = client.send(TestClientMsg(42)).unwrap();
-assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
+assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Sending);
 sleep(sleep_duration);
-assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
+assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Sent);
 
 
 // read message from client
 let (
         msg_client_id,
-        TestClientVal::Msg(TestClientMsg(msg_client_val))
-    ) = server.next_val().unwrap() else { todo!() };
+        TestClientVal::Msg(TestClientMsg(msg_val))
+    ) = server.next_val().unwrap()
+else { todo!() };
 assert_eq!(msg_client_id, client_id);
-assert_eq!(msg_client_val, 42);
+assert_eq!(msg_val, 42);
 
 
 // send message: server -> client
@@ -149,9 +150,33 @@ sleep(sleep_duration);
 
 
 // read message from server
-let TestServerVal::Msg(TestServerMsg(msg_server_val)) =
-    client.next_val().unwrap() else { todo!() };
+let TestServerVal::Msg(TestServerMsg(msg_server_val)) = client.next_val().unwrap()
+else { todo!() };
 assert_eq!(msg_server_val, 24);
+
+
+// send request to server
+let signal = client.request(()).unwrap();
+assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
+sleep(sleep_duration);
+assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Waiting);
+
+
+// read request from client
+let (_, TestClientVal::Request((), request_token)) = server.next_val().unwrap()
+else { todo!() };
+
+
+// acknowledge the request
+server.acknowledge(request_token);
+sleep(sleep_duration);
+assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Acknowledged);
+
+
+// read acknowledgement from server
+let TestServerVal::Ack(request_id) = client.next_val().unwrap()
+else { todo!() };
+assert_eq!(request_id, signal.id());
 
 
 // client closes itself
