@@ -192,7 +192,7 @@ fn rate_limit_test(max_count_per_period: u32)
 //-------------------------------------------------------------------------------------------------------------------
 
 #[test]
-fn bevy_simplenet_rate_limiter()
+fn rate_limiter()
 {
     rate_limit_test(1);
     rate_limit_test(2);

@@ -96,7 +96,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
 //-------------------------------------------------------------------------------------------------------------------
 
 #[test]
-fn bevy_simplenet_authentication()
+fn authentication()
 {
     // prep authenticators
     let none_authenticator = bevy_simplenet::Authenticator::None;

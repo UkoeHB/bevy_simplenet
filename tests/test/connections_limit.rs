@@ -200,7 +200,7 @@ fn connections_limit_test(max_connections: u32)
 //-------------------------------------------------------------------------------------------------------------------
 
 #[test]
-fn bevy_simplenet_connections_limit()
+fn connections_limit()
 {
     connections_limit_test(1);
     connections_limit_test(2);

@@ -51,7 +51,7 @@ fn client_demo_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 //-------------------------------------------------------------------------------------------------------------------
 
 #[test]
-fn bevy_simplenet_hello_world()
+fn hello_world()
 {
     // prepare tracing
     /*

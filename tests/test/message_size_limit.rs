@@ -162,7 +162,7 @@ fn message_size_limit_test(max_msg_size: u32)
 //-------------------------------------------------------------------------------------------------------------------
 
 #[test]
-fn bevy_simplenet_message_size_limit()
+fn message_size_limit()
 {
     message_size_limit_test(25);
     message_size_limit_test(40);
