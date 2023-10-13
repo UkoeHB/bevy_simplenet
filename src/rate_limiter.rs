@@ -3,7 +3,13 @@
 //third-party shortcuts
 
 //standard shortcuts
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
+
+#[cfg(target_family = "wasm")]
+use wasmtimer::std::Instant;
 
 //-------------------------------------------------------------------------------------------------------------------
 
