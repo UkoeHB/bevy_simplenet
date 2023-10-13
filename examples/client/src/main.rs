@@ -4,6 +4,7 @@ use bevy_simplenet_common::*;
 //third-party shortcuts
 use bevy::prelude::*;
 use bevy::window::WindowTheme;
+use bevy::winit::{UpdateMode, WinitSettings};
 use bevy_kot::ecs::*;
 use bevy_kot::ui::{*, RegisterInteractionSourceExt};
 use bevy_kot::ui::builtin::*;
@@ -538,6 +539,11 @@ fn main()
                 }
             )
         )
+        .insert_resource(WinitSettings{
+            focused_mode   : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
+            unfocused_mode : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
+            ..Default::default()
+        })
         .add_plugins(LunexUiPlugin)
         .register_interaction_source(MouseLButtonMain::default())
         .insert_resource(client)
