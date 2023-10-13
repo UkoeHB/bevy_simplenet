@@ -54,22 +54,22 @@ bevy_ecs    = { version = "0.11", optional = true }
 tokio       = { version = "1.29", optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-wasmtimer = { version = "0.2" }
+wasm-timer = { version = "0.2" }
 
 [dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "09319de"
+rev              = "a7b704c"
 default-features = false
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "09319de"
+rev              = "a7b704c"
 default-features = false
 features         = [ "native_client" ]  #todo: how to configure target on 'client' feature
 
 [target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "09319de"
+rev              = "a7b704c"
 default-features = false
 features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature
 

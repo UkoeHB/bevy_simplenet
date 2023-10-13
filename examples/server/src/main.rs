@@ -133,6 +133,14 @@ fn handle_client_incoming(
 
 fn main()
 {
+    // prepare tracing
+    // /*
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(tracing::Level::TRACE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    // */
+
     // simplenet server
     // - we use a baked-in address so you can close and reopen the server to test clients being disconnected
     let server = server_factory().new_server(
@@ -140,7 +148,10 @@ fn main()
             "127.0.0.1:48888",
             bevy_simplenet::AcceptorConfig::Default,
             bevy_simplenet::Authenticator::None,
-            bevy_simplenet::ServerConfig::default(),
+            bevy_simplenet::ServerConfig{
+                heartbeat_interval: std::time::Duration::from_secs(6),  //slower than client to avoid redundant pings
+                ..Default::default()
+            },
         );
 
     // prep server

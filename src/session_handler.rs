@@ -90,7 +90,6 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                     "ping" =>
                     {
                         // received Ping, send Pong back
-                        tracing::info!(?value, "client ping");
                         let _ = self.session.text(format!("pong:{}", value))?;
                     }
                     "pong" =>

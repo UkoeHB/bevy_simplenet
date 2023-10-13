@@ -9,7 +9,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 #[cfg(target_family = "wasm")]
-use wasmtimer::std::Instant;
+use wasm_timer::Instant;
 
 //-------------------------------------------------------------------------------------------------------------------
 

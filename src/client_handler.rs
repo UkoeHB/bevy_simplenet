@@ -60,7 +60,6 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
                     "ping" =>
                     {
                         // received Ping, send Pong back
-                        tracing::info!(?value, "server ping");
                         let _ = self.client.text(format!("pong:{}", value))?;
                     }
                     "pong" =>

@@ -9,7 +9,7 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(target_family = "wasm")]
-use wasmtimer::std::{SystemTime, UNIX_EPOCH};
+use wasm_timer::{SystemTime, UNIX_EPOCH};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -27,7 +27,7 @@ pub(crate) fn log_ping_pong_latency(timestamp: u128)
     let timestamp = Duration::from_millis(timestamp as u64); // TODO: handle overflow
     let latency = SystemTime::now()
         .duration_since(UNIX_EPOCH + timestamp)
-        .unwrap_or(Duration::default());
+        .unwrap_or_default();
     tracing::trace!("latency: {}ms", latency.as_millis());
 }
 

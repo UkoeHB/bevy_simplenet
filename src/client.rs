@@ -223,7 +223,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         socket_config.heartbeat = config.heartbeat_interval;
         socket_config.timeout   = config.keepalive_timeout;
 
-        #[cfg(wasm)]
+        #[cfg(target_family = "wasm")]
         {
             // on WASM we need custom Ping/Pong protocol
             socket_config.heartbeat_ping_msg_fn = Arc::new(text_ping_fn);
