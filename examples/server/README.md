@@ -1,3 +1,4 @@
 ### Server
 
-`cd` to this directory then: `cargo run`
+1. `cd` to this directory
+2. `cargo run`

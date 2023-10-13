@@ -13,7 +13,10 @@ use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Re-exports `ezsockets::MessageSignal`.
 pub type MessageSignal = ezsockets::MessageSignal;
+
+/// Re-exports `ezsockets::MessageStatus`.
 pub type MessageStatus = ezsockets::MessageStatus;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -42,7 +45,7 @@ impl std::error::Error for ClientError {}
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Config controlling how clients respond to connection events.
+/// Config for the [`Client`].
 #[derive(Debug)]
 pub struct ClientConfig
 {

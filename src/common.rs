@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Id for client sessions on the server. Equals the client id.
 pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -73,7 +74,7 @@ pub enum ServerVal<ServerMsg, ServerResponse>
     Response(ServerResponse, u64),
     /// Acknowledges receiving a client request.
     ///
-    /// Will not be followed by a subsequent response (you either get a response, ack, or rejection).
+    /// This will not be followed by a subsequent response (you either get a response, ack, or rejection).
     Ack(u64),
     /// Rejects a client request.
     Reject(u64),
@@ -96,6 +97,7 @@ impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Get a [`ServerVal`] from a [`ChannelPack`].
 pub type ServerValFrom<Channel> = ServerVal<
     <Channel as ChannelPack>::ServerMsg,
     <Channel as ChannelPack>::ServerResponse
@@ -103,6 +105,9 @@ pub type ServerValFrom<Channel> = ServerVal<
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Environment type of a binary.
+///
+/// This is used to define the Ping/Pong protocol between servers and clients.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EnvType
 {
@@ -110,6 +115,7 @@ pub enum EnvType
     Wasm,
 }
 
+/// Get the binary's target environment.
 pub fn env_type() -> EnvType
 {
     #[cfg(not(target_family = "wasm"))]
@@ -119,6 +125,7 @@ pub fn env_type() -> EnvType
     { EnvType::Wasm }
 }
 
+/// Convert [`EnvType`] to a string.
 pub fn env_type_as_str(env_type: EnvType) -> &'static str
 {
     match env_type
@@ -128,6 +135,7 @@ pub fn env_type_as_str(env_type: EnvType) -> &'static str
     }
 }
 
+/// Get a [`EnvType`] from a string.
 pub fn env_type_from_str(env_type: &str) -> Option<EnvType>
 {
     match env_type
@@ -140,7 +148,7 @@ pub fn env_type_from_str(env_type: &str) -> Option<EnvType>
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Make a websocket url: {ws, wss}://[ip:port]/ws.
+/// Make a websocket url: {ws, wss}://\[ip:port\]/ws.
 pub fn make_websocket_url(with_tls: bool, address: SocketAddr) -> Result<url::Url, ()>
 {
     let mut url = url::Url::parse("https://example.net").map_err(|_| ())?;

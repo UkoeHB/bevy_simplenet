@@ -13,13 +13,13 @@ use wasm_timer::Instant;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Configuration for rate limiter. 10 messages per 100 millisconds by default.
+/// Configuration for rate limiter. Defaults to 10 messages per 100 millisconds.
 #[derive(Debug, Copy, Clone)]
 pub struct RateLimitConfig
 {
-    /// Length of time to count messages. 100 milliseconds by default.
+    /// Length of time to count messages. Defaults to 100 milliseconds.
     pub period: Duration,
-    /// Max number of messages that may appear in a collection period. 10 messages by default.
+    /// Max number of messages that may appear in a collection period. Defaults to 10 messages.
     pub max_count: u32
 }
 
@@ -36,7 +36,7 @@ impl Default for RateLimitConfig
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Rate limit tracker.
+/// Tracks and limits the rate that messages are accepted.
 /// - If messages appear, on average, more frequently than count/period, then [`RateLimitTracker::try_count_msg()`]
 ///   will fail.
 #[derive(Debug)]
@@ -55,6 +55,7 @@ pub struct RateLimitTracker
 
 impl RateLimitTracker
 {
+    /// Make a new rate limit tracker.
     pub fn new(config: RateLimitConfig) -> RateLimitTracker
     {
         let next_checkpoint_time = config.period;
@@ -66,6 +67,8 @@ impl RateLimitTracker
             }
     }
 
+    /// Try to add a message to the tracker.
+    /// - Fails if adding the message violates the rate limit.
     pub fn try_count_msg(&mut self) -> bool
     {
         // check if we are in a new period

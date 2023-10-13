@@ -33,7 +33,7 @@ impl std::error::Error for ConnectionError {}
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Server-enforced constraints on client connections.
+/// Config for the [`Server`].
 #[derive(Debug, Copy, Clone)]
 pub struct ServerConfig
 {
@@ -65,6 +65,18 @@ impl Default for ServerConfig
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Configuration for accepting connections to the [`Server`]. Defaults to non-TLS.
+pub enum AcceptorConfig
+{
+    Default,
+    #[cfg(feature = "tls-rustls")]
+    Rustls(axum_server::tls_rustls::RustlsConfig),
+    #[cfg(feature = "tls-openssl")]
+    OpenSSL(axum_server::tls_openssl::OpenSSLConfig),
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Emitted by servers when a client connects/disconnects.
 #[derive(Debug, Clone)]
 pub enum ServerReport<ConnectMsg: Debug + Clone>
@@ -78,7 +90,7 @@ pub enum ServerReport<ConnectMsg: Debug + Clone>
 /// Represents a client request on the server.
 ///
 /// When dropped without using [`Server::respond()`] or [`Server::acknowledge()`], a [`ServerVal::Reject`] message will be
-/// sent to the client. If the client is disconnected then the rejection message will fail and the client will
+/// sent to the client. If the client is disconnected, then the rejection message will fail and the client will
 /// see their request status change to [`RequestStatus::ResponseLost`] after they reconnect.
 pub struct RequestToken
 {
@@ -107,13 +119,17 @@ impl RequestToken
         self.client_id
     }
 
-    /// The request id (defined by the client who sent this request).
+    /// The request id defined by the client who sent this request.
     pub fn request_id(&self) -> u64
     {
         self.request_id
     }
 
     /// Check if the destination session is dead.
+    ///
+    /// Request tokens are tied to a specific server session. When a client reconnects they get a new session and
+    /// old request tokens become invalid.
+    //todo: consider allowing request tokens to persist across reconnects
     pub fn destination_is_dead(&self) -> bool
     {
         self.death_signal.load(Ordering::Relaxed)
@@ -153,12 +169,15 @@ pub enum ClientVal<ClientMsg, ClientRequest>
 {
     /// A one-shot client message.
     Msg(ClientMsg),
-    /// A request the server should reply to with a response, ack, or rejection.
+    /// A request to the server.
+    ///
+    /// The server should reply with a response, ack, or rejection.
     Request(ClientRequest, RequestToken),
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Get a [`ClientVal`] from a [`ChannelPack`].
 pub type ClientValFrom<Channel> = ClientVal<
     <Channel as ChannelPack>::ClientMsg,
     <Channel as ChannelPack>::ClientRequest

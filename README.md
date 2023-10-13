@@ -2,18 +2,20 @@
 
 Provides a bi-directional server/client channel implemented over websockets. This crate is suitable for user authentication, talking to a matchmaking service, communicating between micro-services, games that don't have strict latency requirements, etc.
 
-- Clients automatically work on native and WASM targets.
 - Client/server channel includes one-shot messages and a request/response API.
 - Client message status tracking.
-- Optional server TLS.
+- Clients automatically work on native and WASM targets.
 - Client authentication (WIP).
+- Optional server TLS.
+
+Check out the example for a demonstration of how to build a Bevy client using this crate.
 
 
 
 ## Features
 
 - `default`: `bevy`, `client`, `server`
-- `bevy`: derives `Resource` on `Client` and `Server`
+- `bevy`: derives `Resource` on [`Client`] and [`Server`]
 - `client`: enables clients (native and WASM targets)
 - `server`: enables servers (native-only targets)
 - `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
@@ -29,9 +31,9 @@ On WASM targets the client backend will not update while any other tasks are run
 
 ## Usage notes
 
-- Servers and clients use [enfync](https://crates.io/crates/enfync) runtimes. The backend is [ezsockets](https://github.com/gbaranski/ezsockets).
-- A client's `AuthRequest` type must match the corresponding server's `Authenticator` type.
-- Client ids are defined by clients via their `AuthRequest` when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
+- Servers and clients must be created with [enfync](https://crates.io/crates/enfync) runtimes. The backend is [ezsockets](https://github.com/gbaranski/ezsockets).
+- A client's [`AuthRequest`] type must match the corresponding server's [`Authenticator`] type.
+- Client ids are defined by clients via their [`AuthRequest`] when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
 - Client connect messages will be cloned for all reconnect attempts, so they should be treated as static data.
 - Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`] and [`Client::request()`] to track the status of a message. Message tracking is not currently available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.

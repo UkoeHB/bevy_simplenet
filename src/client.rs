@@ -12,7 +12,9 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// A client for communicating with a server.
+/// A client for communicating with a [`Server`].
+///
+/// Use a [`ClientFactory`] to produce a new client.
 ///
 /// It is safe to drop a client, however if you need a complete shut-down procedure then follow these steps:
 /// 1) Call [`Client::close()`].
@@ -47,7 +49,7 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
+    /// Returns `Err` if the client is dead (todo: calls to [`Client::is_dead()`] may return false for a short time
     /// after this returns `Err`).
     pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
     {
@@ -74,7 +76,7 @@ impl<Channel: ChannelPack> Client<Channel>
     /// will fail if the underlying client becomes disconnected. If a reconnect cycle is very short then a pending request
     /// may complete successfully, but most of the time pending requests will fail after a disconnect.
     ///
-    /// Returns `Err` if the client is dead (todo: calls to [`is_dead()`] may return false for a short time
+    /// Returns `Err` if the client is dead (todo: calls to [`Client::is_dead()`] may return false for a short time
     /// after this returns `Err`).
     pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
     {
@@ -178,7 +180,7 @@ impl<Channel: ChannelPack> Drop for Client<Channel>
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Factory for producing servers that all bake in the same protocol version.
+/// Factory for producing [`Client`]s that all bake in the same protocol version.
 //todo: use const generics on the protocol version instead (currently broken, async methods cause compiler errors)
 #[derive(Debug, Clone)]
 pub struct ClientFactory<Channel: ChannelPack>

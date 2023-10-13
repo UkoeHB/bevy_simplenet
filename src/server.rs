@@ -86,7 +86,9 @@ async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-/// A server for communicating with clients.
+/// A server for communicating with [`Client`]s.
+///
+/// Use a [`ServerFactory`] to produce a new server.
 ///
 /// Note that the server does not currently have a shut-down procedure other than closing the executable.
 #[derive(Debug)]
@@ -234,7 +236,7 @@ impl<Channel: ChannelPack> Server<Channel>
         Some((msg.id, msg.msg))
     }
 
-    /// get the server's url
+    /// Get the server's url.
     pub fn url(&self) -> url::Url
     {
         make_websocket_url(self.uses_tls, self.server_address).unwrap()
@@ -251,18 +253,6 @@ impl<Channel: ChannelPack> Server<Channel>
     {
         self.server_closed_signal.done() || self.server_running_signal.done()
     }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Configuration for the server's connection acceptor. Default is non-TLS.
-pub enum AcceptorConfig
-{
-    Default,
-    #[cfg(feature = "tls-rustls")]
-    Rustls(axum_server::tls_rustls::RustlsConfig),
-    #[cfg(feature = "tls-openssl")]
-    OpenSSL(axum_server::tls_openssl::OpenSSLConfig),
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -297,9 +287,6 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
     where
         A: std::net::ToSocketAddrs + Send + 'static,
     {
-        #[cfg(wasm)]
-        { panic!("bevy simplenet servers not supported on WASM!"); }
-
         // prepare message channels that point out of connection handler
         let (
                 connection_report_sender,

@@ -37,7 +37,7 @@ fn authenticate_token(request: &AuthRequest) -> bool
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Size of secrets for `Secret` authentication type.
+/// Secret size for the [`Authenticator::Secret`] authentication type.
 pub const SECRET_AUTH_BYTES: usize = 16;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ pub struct AuthToken
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Used by server to authenticate client connections.
+/// Used by the [`Server`](crate::Server) to authenticate [`Client`](crate::Client) connections.
 #[derive(Debug, Clone)]
 pub enum Authenticator
 {
@@ -73,7 +73,7 @@ pub enum Authenticator
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Provided by clients to connect to a server.
+/// [`Client`](crate::Client) authentication for connecting to a [`Server`](crate::Server).
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthRequest
@@ -114,6 +114,7 @@ impl AuthRequest
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Authenticates an auth request.
 pub fn authenticate(request: &AuthRequest, authenticator: &Authenticator) -> bool
 {
     match authenticator

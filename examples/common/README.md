@@ -1,1 +1,1 @@
-Contains code shared by the client/server examples.
+Contains code shared by the client/server examples. We put this here instead of the server crate so the client doesn't have to depend on the server (this is necessary for WASM clients which cannot depend on the server backend which is native-only).
