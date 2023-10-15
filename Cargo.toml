@@ -4,7 +4,7 @@ description = "Simple server/client channel implemented over websockets with sup
 authors = ["koe <ukoe@protonmail.com>"]
 version = "0.1.0"
 edition = "2021"
-keywords = ["gamedev", "networking"]
+keywords = ["gamedev", "networking", "wasm"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/UkoeHB/bevy_simplenet"
@@ -57,18 +57,18 @@ wasm-timer = { version = "0.2" }
 
 [dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "a7b704c"
+rev              = "f6ddaad"
 default-features = false
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "a7b704c"
+rev              = "f6ddaad"
 default-features = false
 features         = [ "native_client" ]  #todo: how to configure target on 'client' feature?
 
 [target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
 git              = "https://github.com/UkoeHB/ezsockets.git"
-rev              = "a7b704c"
+rev              = "f6ddaad"
 default-features = false
 features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature?
 
