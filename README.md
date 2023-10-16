@@ -129,10 +129,11 @@ assert_eq!(server.num_connections(), 1u64);
 
 
 // read connection messages
-let bevy_simplenet::ServerReport::Connected(client_id, connect_msg) =
+let bevy_simplenet::ServerReport::Connected(client_id, env_type, connect_msg) =
     server.next_report().unwrap() else { panic!("client not connected to server"); };
 let bevy_simplenet::ClientReport::Connected =
     client.next_report().unwrap() else { panic!("client not connected to server"); };
+assert_eq!(env_type, bevy_simplenet::EnvType::Native);
 assert_eq!(connect_msg.0, String::from("hello"));
 
 

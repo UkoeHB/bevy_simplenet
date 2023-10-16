@@ -81,7 +81,7 @@ pub enum AcceptorConfig
 #[derive(Debug, Clone)]
 pub enum ServerReport<ConnectMsg: Debug + Clone>
 {
-    Connected(SessionID, ConnectMsg),
+    Connected(SessionID, EnvType, ConnectMsg),
     Disconnected(SessionID)
 }
 

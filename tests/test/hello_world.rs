@@ -104,7 +104,7 @@ fn hello_world()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, connect_msg)) = websocket_server.next_report()
+    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, connect_msg)) = websocket_server.next_report()
     else { panic!("server should be connected once client is connected"); };
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
@@ -176,7 +176,7 @@ fn hello_world()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, connect_msg)) = websocket_server.next_report()
+    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, connect_msg)) = websocket_server.next_report()
     else { panic!("server should be connected once client is connected"); };
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };

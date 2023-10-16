@@ -86,7 +86,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 
         // report the new connection
         if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<Channel::ConnectMsg>::Connected(info.id, info.connect_msg)
+                ServerReport::<Channel::ConnectMsg>::Connected(info.id, info.client_env_type, info.connect_msg)
             )
         {
             tracing::error!(?err, "forwarding connection report failed");

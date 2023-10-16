@@ -108,7 +108,7 @@ pub type ServerValFrom<Channel> = ServerVal<
 /// Environment type of a binary.
 ///
 /// This is used to define the Ping/Pong protocol between servers and clients.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum EnvType
 {
     Native,

@@ -101,7 +101,7 @@ fn connections_limit_test(max_connections: u32)
         assert!(!websocket_client.is_dead());
         let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
         else { panic!("client should be connected to server"); };
-        let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
+        let Some(bevy_simplenet::ServerReport::Connected(_, _, _)) = websocket_server.next_report()
         else { panic!("server should be connected to client: {}", client_num); };
         assert_eq!(websocket_server.num_connections(), 1u64 + client_num as u64);
 
@@ -159,7 +159,7 @@ fn connections_limit_test(max_connections: u32)
     assert!(!websocket_client.is_dead());
     let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
     else { panic!("client should be connected to server"); };
-    let Some(bevy_simplenet::ServerReport::Connected(_, _)) = websocket_server.next_report()
+    let Some(bevy_simplenet::ServerReport::Connected(_, _, _)) = websocket_server.next_report()
     else { panic!("server should be connected to client"); };
     assert_eq!(websocket_server.num_connections(), max_connections as u64);
 

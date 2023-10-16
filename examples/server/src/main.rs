@@ -69,7 +69,7 @@ fn update_client_connections(
     {
         match connection_report
         {
-            bevy_simplenet::ServerReport::Connected(id, _) => { let _ = clients.0.insert(id); },
+            bevy_simplenet::ServerReport::Connected(id, _, _) => { let _ = clients.0.insert(id); },
             bevy_simplenet::ServerReport::Disconnected(id) =>
             {
                 let _ = clients.0.remove(&id);
