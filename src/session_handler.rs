@@ -65,7 +65,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
             {
                 // reject text from client
                 tracing::trace!("received text from native client (not implemented), closing session...");
-                self.close("text not allowed").await; return Ok(());
+                self.close("text not allowed"); return Ok(());
             }
             EnvType::Wasm =>
             {
@@ -74,7 +74,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                 else
                 {
                     tracing::trace!("received invalid text from WASM client, closing session...");
-                    self.close("only ping/pong text allowed").await; return Ok(());
+                    self.close("only ping/pong text allowed"); return Ok(());
                 };
 
                 // try to deserialize timestamp
@@ -82,7 +82,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                 else
                 {
                     tracing::trace!("received invalid ping/pong timestamp from WASM client, closing session...");
-                    self.close("only timestamp ping/pong allowed").await; return Ok(());
+                    self.close("only timestamp ping/pong allowed"); return Ok(());
                 };
 
                 match var
@@ -100,7 +100,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                     _ =>
                     {
                         tracing::trace!("received invalid ping/pong timestamp from WASM client, closing session...");
-                        self.close("only ping/pong prefixes allowed").await;
+                        self.close("only ping/pong prefixes allowed");
                     }
                 }
             }
@@ -116,20 +116,20 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
         if !self.rate_limit_tracker.try_count_msg()
         {
             tracing::trace!("client messages exceeded rate limit, closing session...");
-            self.close("rate limit violation").await; return Ok(());
+            self.close("rate limit violation"); return Ok(());
         }
 
         // try to deserialize message
         if bytes.len() > self.max_msg_size as usize
         {
             tracing::trace!("received client message that's too large, closing session...");
-            self.close("message size violation").await; return Ok(());
+            self.close("message size violation"); return Ok(());
         }
         let Ok(message) = bincode::DefaultOptions::new().deserialize(&bytes[..])
         else
         {
             tracing::trace!("received client message that failed to deserialize, closing session...");
-            self.close("deserialization failure").await; return Ok(());
+            self.close("deserialization failure"); return Ok(());
         };
 
         // decide what to do with the message
@@ -143,7 +143,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
-                    self.close("session error").await; return Ok(());
+                    self.close("session error"); return Ok(());
                 }
             }
             ClientMetaFrom::<Channel>::Request(request, request_id) =>
@@ -169,7 +169,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
-                    self.close("session error").await; return Ok(());
+                    self.close("session error"); return Ok(());
                 }
             }
             ClientMetaFrom::<Channel>::Sync(request) =>
@@ -193,7 +193,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                 if let Err(_) = self.session.binary(ser_msg)
                 {
                     tracing::debug!(self.id, "dropping sync response sent to broken session");
-                    self.close("session error").await; return Ok(());
+                    self.close("session error"); return Ok(());
                 }
             }
         }
@@ -205,14 +205,14 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
     async fn on_call(&mut self, _msg: ()) -> Result<(), ezsockets::Error>
     {
         tracing::info!(self.id, "received call (not implemented), closing session...");
-        self.close("session error").await; return Ok(());
+        self.close("session error"); return Ok(());
     }
 }
 
 impl<Channel: ChannelPack> SessionHandler<Channel>
 {
     /// Close the session
-    async fn close(&mut self, reason: &str)
+    fn close(&mut self, reason: &str)
     {
         tracing::info!(self.id, "closing...");
         if let Err(_) = self.session.close(Some(
@@ -221,7 +221,7 @@ impl<Channel: ChannelPack> SessionHandler<Channel>
                     code   : ezsockets::CloseCode::Error,
                     reason : String::from(reason)
                 }
-            )).await
+            ))
         {
             tracing::error!(self.id, "failed closing session");
         }

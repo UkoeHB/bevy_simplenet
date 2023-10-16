@@ -207,6 +207,7 @@ else { panic!("client not dead"); };
 
 ## TODOs
 
+- This crate causes linker errors when the `bevy/dynamic_linking` feature is enabled.
 - Implement `AuthToken` for client/server authentication.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
 - Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `bevy_simplenet::Server::send()` method.

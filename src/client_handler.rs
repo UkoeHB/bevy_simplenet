@@ -160,7 +160,15 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         Ok(())
     }
 
-    //todo: on_connect_fail() (need ezsockets update)
+    /// Respond to the client failing a connection attempt.
+    async fn on_connect_fail(
+        &mut self,
+        _error: ezsockets::WSError
+    ) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
+    {
+        //todo: don't try to reconnect if auth token expired
+        Ok(ezsockets::client::ClientCloseMode::Reconnect)
+    }
 
     /// Respond to the client being disconnected.
     async fn on_disconnect(&mut self) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
