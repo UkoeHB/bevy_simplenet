@@ -115,7 +115,7 @@ fn request_response()
 
     // send response: server -> client
     let server_val = 24;
-    websocket_server.respond(DemoServerResponse(server_val), token).unwrap();
+    websocket_server.respond(token, DemoServerResponse(server_val)).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

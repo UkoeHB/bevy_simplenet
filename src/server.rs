@@ -141,7 +141,7 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Respond to a client request.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
-    pub fn respond(&self, response: Channel::ServerResponse, token: RequestToken) -> Result<(), ()>
+    pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse) -> Result<(), ()>
     {
         let client_id  = token.client_id();
         let request_id = token.request_id();

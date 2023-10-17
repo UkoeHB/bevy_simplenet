@@ -113,7 +113,7 @@ fn handle_client_incoming(
                         // send current server state to client
                         // - we must use new_button_state to ensure the order of events is preserved
                         let current_state = new_button_state;
-                        let _ = server.respond(DemoServerResponse::Current(current_state), token);
+                        let _ = server.respond(token, DemoServerResponse::Current(current_state));
                     }
                 }
             }
