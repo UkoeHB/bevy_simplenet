@@ -22,7 +22,7 @@ use wasm_timer::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoClient = bevy_simplenet::Client<DemoChannel>;
+type DemoClient    = bevy_simplenet::Client<DemoChannel>;
 type DemoServerVal = bevy_simplenet::ServerValFrom<DemoChannel>;
 
 fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
@@ -60,8 +60,8 @@ fn status_to_string(status: ConnectionStatus) -> &'static str
 #[derive(Component, Default)]
 struct ButtonOwner
 {
-    server_authoritative_id: Option<u128>,
-    predicted_id: Option<u128>
+    server_authoritative_id : Option<u128>,
+    predicted_id            : Option<u128>
 }
 
 impl ButtonOwner
@@ -137,6 +137,7 @@ fn refresh_button_owner_text(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Handler for when the button is selected.
 fn handle_button_select(
     mut commands      : Commands,
     client            : Res<DemoClient>,
@@ -168,6 +169,7 @@ fn handle_button_select(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Handler for when the button is deselected.
 fn handle_button_deselect(mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner)>)
 {
     let (mut pending_select, mut owner) = current_state.single_mut();
@@ -191,10 +193,14 @@ fn set_new_server_state(
     // update server state
     owner.server_authoritative_id = server_state;
 
-    // update local state
+    // check if we are predicted
     if pending_select.is_predicted() { return; }
-    if server_state == Some(client.id()) { return; }
-    commands.add(deselect_callback.clone());
+
+    // if not predicted and server state doesn't match our id, deselect
+    if server_state != Some(client.id())
+    {
+        commands.add(deselect_callback.clone());
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -219,7 +225,7 @@ fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer
     let text = Widget::create(
             ui,
             layout_helper.end(""),
-            SolidLayout::new()
+            SolidLayout::new()  //keep text in top right corner when window is resized
                 .with_horizontal_anchor(1.0)
                 .with_vertical_anchor(-1.0),
         ).unwrap();
@@ -323,7 +329,7 @@ fn button_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut 
         .unwrap();
     entity_commands.insert(UIInteractionBarrier::<MainUI>::default());
 
-    // cached select signal
+    // cached select signal and server state tracking
     entity_commands.insert(
             (
                 PendingSelect::default(),
@@ -532,12 +538,14 @@ fn main()
     // run client
     App::new()
         .add_plugins(
-            bevy::DefaultPlugins.set(
-                WindowPlugin{
-                    primary_window: Some(Window{ window_theme: Some(WindowTheme::Dark), ..Default::default() }),
-                    ..Default::default()
-                }
-            )
+            bevy::DefaultPlugins
+                .set(
+                    WindowPlugin{
+                        primary_window: Some(Window{ window_theme: Some(WindowTheme::Dark), ..Default::default() }),
+                        ..Default::default()
+                    }
+                )
+                .build().disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>()
         )
         .insert_resource(WinitSettings{
             focused_mode   : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
@@ -552,8 +560,8 @@ fn main()
         .add_systems(PreUpdate, handle_connection_changes)
         .add_systems(Update,
             (
-                handle_server_incoming,
-                check_pending_select,
+                handle_server_incoming, apply_deferred,
+                check_pending_select, apply_deferred,
                 refresh_status_text,
                 refresh_button_owner_text,
             ).chain()

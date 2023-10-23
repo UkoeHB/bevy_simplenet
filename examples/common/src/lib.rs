@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DemoServerMsg
 {
-    /// Updated current owner.
+    /// Current owner.
     Current(Option<u128>),
 }
 
@@ -20,7 +20,9 @@ pub enum DemoServerMsg
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DemoServerResponse
 {
-    /// Client that currently has selected the button.
+    /// Current owner.
+    ///
+    /// Response to [`DemoClientRequest::GetState`].
     Current(Option<u128>),
 }
 
