@@ -535,18 +535,22 @@ fn main()
             ()
         );
 
+    // prepare bevy plugins
+    let bevy_plugins = bevy::DefaultPlugins
+        .set(
+            WindowPlugin{
+                primary_window: Some(Window{ window_theme: Some(WindowTheme::Dark), ..Default::default() }),
+                ..Default::default()
+            }
+        );
+
+    // reduce input lag on native targets
+    #[cfg(not(target_family = "wasm"))]
+    let bevy_plugins = bevy_plugins.build().disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>();
+
     // run client
     App::new()
-        .add_plugins(
-            bevy::DefaultPlugins
-                .set(
-                    WindowPlugin{
-                        primary_window: Some(Window{ window_theme: Some(WindowTheme::Dark), ..Default::default() }),
-                        ..Default::default()
-                    }
-                )
-                .build().disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>()
-        )
+        .add_plugins(bevy_plugins)
         .insert_resource(WinitSettings{
             focused_mode   : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
             unfocused_mode : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
