@@ -237,24 +237,48 @@ impl PendingRequestTracker
         if client.binary(ser_msg).is_err() { tracing::warn!("tried to send sync request to dead client"); }
     }
 
+    /// Drain messages with status [`RequestStatus::SendFailed`].
+    pub(crate) fn drain_failed_sends(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    {
+        // remove all entries with SendFailed status
+        self.pending_requests.drain_filter(
+                |_, signal| -> bool
+                {
+                    if signal.status() != RequestStatus::SendFailed { return false; }
+                    true
+                }
+            ).map(|(_, signal)| signal )
+    }
+
     /// Handle a sync response from the server.
     ///
     /// We mark all pending requests lower than the server's earliest-seen request as [`RequestStatus::ResponseLost`].
-    pub(crate) fn handle_sync_response(&mut self, response: SyncResponse)
+    ///
+    /// Failed requests are drained.
+    pub(crate) fn handle_sync_response(&mut self, response: SyncResponse) -> Option<impl Iterator<Item = RequestSignal> + '_>
     {
         // ignore response if not responding to latest request
         if Some(response.request.request_id) != self.latest_sync_request
-        { tracing::debug!(?response, ?self.latest_sync_request, "received stale sync response"); return; }
+        { tracing::debug!(?response, ?self.latest_sync_request, "received stale sync response"); return None; }
 
         // remove all entries lower than the sync point
-        self.pending_requests.retain(
-                |id, signal| -> bool
+        let earliest_req = response.earliest_req;
+        Some(self.pending_requests.drain_filter(
+                move |id, signal| -> bool
                 {
-                    if *id >= response.earliest_req { return true; }
+                    if *id >= earliest_req { return false; }
                     signal.inner().set(RequestStatus::ResponseLost);
-                    false
+                    true
                 }
-            );
+            ).map(|(_, signal)| signal ))
+    }
+
+    /// Set the latest sync request id.
+    ///
+    /// Useful for cleanup procedure when a client handler is being dropped.
+    pub(crate) fn force_set_latest_sync_request(&mut self, id: u64)
+    {
+        self.latest_sync_request = Some(id);
     }
 }
 

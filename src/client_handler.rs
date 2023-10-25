@@ -94,7 +94,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             ServerMetaFrom::<Channel>::Val(msg) =>
             {
                 // handle pending request meta
-                if let Some((request_id, request_status)) = msg.into_request_status()
+                if let Some((request_id, request_status)) = msg.request_status()
                 {
                     // clean up pending request
                     let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
@@ -121,7 +121,30 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             {
                 // clean up pending requests
                 let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
-                pending_requests.handle_sync_response(response);
+                let Some(failed_reqs) = pending_requests.handle_sync_response(response) else { return Ok(()); };
+                for failed_req in failed_reqs
+                {
+                    match failed_req.status()
+                    {
+                        RequestStatus::SendFailed =>
+                        {
+                            if let Err(err) = self.server_val_sender.send(ServerValFrom::<Channel>::SendFailed(failed_req.id()))
+                            {
+                                tracing::error!(?err, "failed to forward server msg to client");
+                                return Err(Box::new(ClientError::SendError));
+                            }
+                        }
+                        RequestStatus::ResponseLost =>
+                        {
+                            let _ = self.server_val_sender.send(ServerValFrom::<Channel>::ResponseLost(failed_req.id()));
+                        }
+                        status =>
+                        {
+                            tracing::error!(?status, "unexpected request status while handling sync response");
+                        }
+                    }
+                }
+
                 self.last_acked_sync_point = std::cmp::max(response.earliest_req, self.last_acked_sync_point);
             }
         }
@@ -143,13 +166,15 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     async fn on_connect(&mut self) -> Result<(), ezsockets::Error>
     {
         // make sync request if there are pending requests
-        let Ok(mut pending_requests) = self.pending_requests.lock()
-        else
         {
-            tracing::error!("failed to lock pending requests");
-            return Err(Box::new(ClientError::SendError));
-        };
-        pending_requests.try_make_sync_request(&self.client);
+            let Ok(mut pending_requests) = self.pending_requests.lock()
+            else
+            {
+                tracing::error!("failed to lock pending requests");
+                return Err(Box::new(ClientError::SendError));
+            };
+            pending_requests.try_make_sync_request(&self.client);
+        }
 
         // forward connection event to client owner
         if let Err(err) = self.connection_report_sender.send(ClientReport::Connected)
@@ -157,6 +182,13 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             tracing::error!(?err, "failed to forward connection event to client");
             return Err(Box::new(ClientError::SendError));
         }
+
+        // clean up failed sends
+        //todo: ezsockets calls on_connect() before setting the new socket, which may introduce race conditions
+        //      especially on WASM where failed sends are not handled until the sync response (because failed send
+        //      detection via MessageSignal::drop() may require dropping the socket)
+        self.handle_failed_sends()?;
+
         Ok(())
     }
 
@@ -166,6 +198,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         _error: ezsockets::WSError
     ) -> Result<ezsockets::client::ClientCloseMode, ezsockets::Error>
     {
+        // clean up failed sends
+        self.handle_failed_sends()?;
+
         //todo: don't try to reconnect if auth token expired
         Ok(ezsockets::client::ClientCloseMode::Reconnect)
     }
@@ -214,6 +249,34 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     }
 }
 
+impl<Channel: ChannelPack> ClientHandler<Channel>
+{
+    fn handle_failed_sends(&mut self) -> Result<(), ezsockets::Error>
+    {
+        let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+        for failed_send in pending_requests.drain_failed_sends()
+        {
+            match failed_send.status()
+            {
+                RequestStatus::SendFailed =>
+                {
+                    if let Err(err) = self.server_val_sender.send(ServerValFrom::<Channel>::SendFailed(failed_send.id()))
+                    {
+                        tracing::error!(?err, "failed to forward server msg to client");
+                        return Err(Box::new(ClientError::SendError));
+                    }
+                }
+                status =>
+                {
+                    tracing::error!(?status, "unexpected request status while draining failed sends");
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
 {
     fn drop(&mut self)
@@ -223,6 +286,38 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
         {
             // failing may not be an error since the owning client could have been dropped
             tracing::debug!(?err, "failed to forward 'client is dead' report to client");
+        }
+
+        // clean up pending requests
+        let Ok(mut pending_requests) = self.pending_requests.lock() else { return; };
+
+        let fake_sync_response = SyncResponse{ request: SyncRequest{ request_id: u64::MAX }, earliest_req: u64::MAX };
+        pending_requests.force_set_latest_sync_request(u64::MAX);
+
+        let Some(failed_reqs) = pending_requests.handle_sync_response(fake_sync_response) else { return; };
+        for failed_req in failed_reqs
+        {
+            match failed_req.status()
+            {
+                RequestStatus::SendFailed =>
+                {
+                    if let Err(_) = self.server_val_sender.send(ServerValFrom::<Channel>::SendFailed(failed_req.id()))
+                    {
+                        return;
+                    }
+                }
+                RequestStatus::ResponseLost =>
+                {
+                    if let Err(_) = self.server_val_sender.send(ServerValFrom::<Channel>::ResponseLost(failed_req.id()))
+                    {
+                        return;
+                    }
+                }
+                status =>
+                {
+                    tracing::error!(?status, "unexpected request status while dropping client");
+                }
+            }
         }
     }
 }

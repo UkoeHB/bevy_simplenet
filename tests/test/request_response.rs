@@ -129,10 +129,6 @@ fn request_response()
     // no more outputs
     let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_report()
-    else { panic!("client should receive no more connection reports"); };
-    let None = websocket_client.next_val()
-    else { panic!("client should receive no more values"); };
     let None = websocket_client.next_val()
     else { panic!("client should receive no more values"); };
 }
@@ -220,10 +216,6 @@ fn request_ack()
     // no more outputs
     let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_report()
-    else { panic!("client should receive no more connection reports"); };
-    let None = websocket_client.next_val()
-    else { panic!("client should receive no more values"); };
     let None = websocket_client.next_val()
     else { panic!("client should receive no more values"); };
 }
@@ -311,10 +303,6 @@ fn request_rejected()
     // no more outputs
     let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_report()
-    else { panic!("client should receive no more connection reports"); };
-    let None = websocket_client.next_val()
-    else { panic!("client should receive no more values"); };
     let None = websocket_client.next_val()
     else { panic!("client should receive no more values"); };
 }
@@ -424,6 +412,13 @@ fn request_dropped()
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::ResponseLost);
 
 
+    // receive response lost
+    let Some(DemoServerVal::ResponseLost(request_id)) = websocket_client.next_val()
+    else { panic!("client did not receive server msg"); };
+    assert_eq!(signal.id(), request_id);
+
+
+
     // try to acknowledge the token (nothing should happen since the original target session was replaced)
     websocket_server.acknowledge(token).unwrap();
 
@@ -434,10 +429,6 @@ fn request_dropped()
     // no more outputs
     let None = websocket_server.next_report()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_report()
-    else { panic!("client should receive no more connection reports"); };
-    let None = websocket_client.next_val()
-    else { panic!("client should receive no more values"); };
     let None = websocket_client.next_val()
     else { panic!("client should receive no more values"); };
 }

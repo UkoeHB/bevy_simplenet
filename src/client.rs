@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 /// 2) Wait for [`Client::is_dead()`] to return true. Note that on WASM targets you cannot busy-wait since doing so
 ///    will block the client backend.
 /// 3) Call [`Client::next_val()`] to drain any lingering server values.
-/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`]).
+/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`].
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Client<Channel: ChannelPack>

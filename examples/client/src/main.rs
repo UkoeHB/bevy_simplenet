@@ -479,30 +479,14 @@ fn handle_server_incoming(
                 // roll back predicted input
                 commands.add(deselect_callback.clone());
             }
-        }
-    }
-}
+            DemoServerVal::SendFailed(request_id)   |
+            DemoServerVal::ResponseLost(request_id) =>
+            {
+                if !pending_select.equals_request(request_id) { continue; }
 
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn check_pending_select(
-    mut commands  : Commands,
-    current_state : Query<(&PendingSelect, &Callback<Deselect>)>,
-){
-    let (pending_select, deselect_callback) = current_state.single();
-    let Some(message_signal) = &pending_select.0 else { return; };
-
-    match message_signal.status()
-    {
-        bevy_simplenet::RequestStatus::Sending      => (),
-        bevy_simplenet::RequestStatus::Waiting      => (),
-        bevy_simplenet::RequestStatus::Responded    |
-        bevy_simplenet::RequestStatus::Acknowledged => (), //do nothing, wait for server message
-        _ =>
-        {
-            // an error occurred, roll back the predicted input
-            commands.add(deselect_callback.clone());
+                // an error occurred, roll back the predicted input
+                commands.add(deselect_callback.clone());
+            }
         }
     }
 }
@@ -565,7 +549,6 @@ fn main()
         .add_systems(Update,
             (
                 handle_server_incoming, apply_deferred,
-                check_pending_select, apply_deferred,
                 refresh_status_text,
                 refresh_button_owner_text,
             ).chain()

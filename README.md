@@ -10,6 +10,8 @@ Provides a bi-directional server/client channel implemented over websockets. Thi
 
 Check out the example for a demonstration of how to build a Bevy client using this crate.
 
+This crate requires nightly rust.
+
 
 
 ## Features
@@ -212,6 +214,7 @@ else { panic!("client not dead"); };
 - Implement `AuthToken` for client/server authentication.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
 - Message status tracking for server messages. This may require changes to `ezsockets` in order to inject a `MessageSignal` insantiated in the `bevy_simplenet::Server::send()` method.
+- Move to stable rust once `HashMap::extract_if()` is stabilized.
 
 
 

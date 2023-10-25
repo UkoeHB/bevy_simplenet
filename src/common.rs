@@ -78,19 +78,29 @@ pub enum ServerVal<ServerMsg, ServerResponse>
     Ack(u64),
     /// Rejects a client request.
     Reject(u64),
+    /// Sending a request failed.
+    ///
+    /// This variant is only constructed in the client.
+    SendFailed(u64),
+    /// The server received a request but failed to send a response.
+    ///
+    /// This variant is only constructed in the client.
+    ResponseLost(u64),
 }
 
 impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
 {
     /// Convert a server value into a request status.
-    pub fn into_request_status(&self) -> Option<(u64, RequestStatus)>
+    pub fn request_status(&self) -> Option<(u64, RequestStatus)>
     {
         match self
         {
-            Self::Msg(_)          => None,
-            Self::Response(_, id) => Some((*id, RequestStatus::Responded)),
-            Self::Ack(id)         => Some((*id, RequestStatus::Acknowledged)),
-            Self::Reject(id)      => Some((*id, RequestStatus::Rejected)),
+            Self::Msg(_)           => None,
+            Self::Response(_, id)  => Some((*id, RequestStatus::Responded)),
+            Self::Ack(id)          => Some((*id, RequestStatus::Acknowledged)),
+            Self::Reject(id)       => Some((*id, RequestStatus::Rejected)),
+            Self::SendFailed(id)   => Some((*id, RequestStatus::SendFailed)),
+            Self::ResponseLost(id) => Some((*id, RequestStatus::ResponseLost)),
         }
     }
 }

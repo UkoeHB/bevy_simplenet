@@ -1,3 +1,6 @@
+//features
+#![feature(hash_drain_filter)]  //todo: nightly/unstable, will change to extract_if
+
 //documentation
 #![doc = include_str!("../README.md")]
 
