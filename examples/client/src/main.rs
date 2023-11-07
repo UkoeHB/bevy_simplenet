@@ -5,9 +5,7 @@ use bevy_simplenet_common::*;
 use bevy::prelude::*;
 use bevy::window::WindowTheme;
 use bevy::winit::{UpdateMode, WinitSettings};
-use bevy_kot::ecs::*;
-use bevy_kot::ui::{*, RegisterInteractionSourceExt};
-use bevy_kot::ui::builtin::*;
+use bevy_kot::prelude::{*, builtin::*};
 use bevy_lunex::prelude::*;
 
 //standard shortcuts
@@ -206,12 +204,12 @@ fn set_new_server_state(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut UiTree, text_base: Widget)
+fn connection_status_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 {
     // text layout helper
     let layout_helper = Widget::create(
-            ui,
-            text_base.end(""),
+            ui.tree(),
+            area.end(""),
             RelativeLayout{  //add slight buffer around edge; extend y-axis to avoid resizing issues
                 absolute_1: Vec2 { x: 5., y: 5. },
                 absolute_2: Vec2 { x: -5., y: 0. },
@@ -223,7 +221,7 @@ fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer
 
     // text widget
     let text = Widget::create(
-            ui,
+            ui.tree(),
             layout_helper.end(""),
             SolidLayout::new()  //keep text in top right corner when window is resized
                 .with_horizontal_anchor(1.0)
@@ -231,12 +229,12 @@ fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer
         ).unwrap();
 
     let text_style = TextStyle {
-            font      : asset_server.load("fonts/FiraSans-Bold.ttf"),
+            font      : ui.asset_server.load("fonts/FiraSans-Bold.ttf"),
             font_size : 45.0,
             color     : Color::WHITE,
         };
 
-    commands.spawn(
+    ui.commands().spawn(
             (
                 TextElementBundle::new(
                     text,
@@ -251,28 +249,20 @@ fn connection_status_section(commands: &mut Commands, asset_server: &AssetServer
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn button_owner_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut UiTree, owner_base: Widget)
+fn button_owner_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 {
-    // text layout helper
-    let layout_helper = Widget::create(
-            ui,
-            owner_base.end(""),
-            RelativeLayout{  //extend y-axis to avoid resizing issues
-                relative_1: Vec2 { x: 0., y: 0. },
-                relative_2: Vec2 { x: 100., y: 200. },
-                ..Default::default()
-            }
-        ).unwrap();
+    // text layout helper (extend y-axis to avoid resizing issues)
+    let layout_helper = relative_widget(ui.tree(), area.end(""), (0., 100.), (0., 200.));
 
     // text widget
-    let text = Widget::create(ui, layout_helper.end(""), SolidLayout::new()).unwrap();
+    let text = Widget::create(ui.tree(), layout_helper.end(""), SolidLayout::new()).unwrap();
     let text_style = TextStyle {
-            font      : asset_server.load("fonts/FiraSans-Bold.ttf"),
+            font      : ui.asset_server.load("fonts/FiraSans-Bold.ttf"),
             font_size : 45.0,
             color     : Color::WHITE,
         };
 
-    commands.spawn(
+    ui.commands().spawn(
             (
                 TextElementBundle::new(
                     text,
@@ -287,45 +277,43 @@ fn button_owner_section(commands: &mut Commands, asset_server: &AssetServer, ui:
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn button_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut UiTree, button_base: Widget)
+fn button_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 {
     // default button image tied to button
-    let default_widget = make_overlay(ui, &button_base, "default", true);
-    commands.spawn(
-            ImageElementBundle::new(
-                    &default_widget,
-                    ImageParams::center()
-                        .with_width(Some(100.))
-                        .with_height(Some(100.))
-                        .with_color(Color::GRAY),
-                    asset_server.load("example_button_rect.png"),
-                    Vec2::new(250.0, 142.0)
-                )
+    let default_widget = make_overlay(ui.tree(), &area, "default", true);
+    let image = ImageElementBundle::new(
+            &default_widget,
+            ImageParams::center()
+                .with_width(Some(100.))
+                .with_height(Some(100.))
+                .with_color(Color::GRAY),
+            ui.asset_server.load("example_button_rect.png"),
+            Vec2::new(250.0, 142.0)
         );
+    ui.commands().spawn(image);
 
     // selected button image tied to button
-    let selected_widget = make_overlay(ui, &button_base, "selected", false);
-    commands.spawn(
-            ImageElementBundle::new(
-                    &selected_widget,
-                    ImageParams::center()
-                        .with_width(Some(100.))
-                        .with_height(Some(100.))
-                        .with_color(Color::DARK_GRAY),  //tint when selected
-                    asset_server.load("example_button_rect.png"),
-                    Vec2::new(250.0, 142.0)
-                )
+    let selected_widget = make_overlay(ui.tree(), &area, "selected", false);
+    let image = ImageElementBundle::new(
+            &selected_widget,
+            ImageParams::center()
+                .with_width(Some(100.))
+                .with_height(Some(100.))
+                .with_color(Color::DARK_GRAY),  //tint when selected
+            ui.asset_server.load("example_button_rect.png"),
+            Vec2::new(250.0, 142.0)
         );
+    ui.commands().spawn(image);
 
     // button interactivity
-    let mut entity_commands = commands.spawn_empty();
+    let mut entity_commands = ui.commands().spawn_empty();
     InteractiveElementBuilder::new()
         .with_default_widget(default_widget)
         .with_selected_widget(selected_widget)
         .select_on_click()
         .select_callback(|world| syscall(world, (), handle_button_select))
         .deselect_callback(|world| syscall(world, (), handle_button_deselect))
-        .build::<MouseLButtonMain>(&mut entity_commands, button_base)
+        .build::<MouseLButtonMain>(&mut entity_commands, area)
         .unwrap();
     entity_commands.insert(UIInteractionBarrier::<MainUI>::default());
 
@@ -341,7 +329,28 @@ fn button_section(commands: &mut Commands, asset_server: &AssetServer, ui: &mut 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>)
+fn build_ui(mut ui: UiBuilder<MainUI>)
+{
+    // root widget
+    let root = relative_widget(ui.tree(), "root", (0., 100.), (0., 100.));
+
+    // connection status text
+    let text_base = relative_widget(ui.tree(), root.end("text"), (70., 100.), (0., 20.));
+    connection_status_section(&mut ui, text_base);
+
+    // button owner text
+    let owner_base = relative_widget(ui.tree(), root.end("owner"), (37., 63.), (15., 35.));
+    button_owner_section(&mut ui, owner_base);
+
+    // button
+    let button_base = relative_widget(ui.tree(), root.end("button"), (35., 65.), (40., 60.));
+    button_section(&mut ui, button_base);
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
+fn setup(mut commands: Commands)
 {
     // prepare 2D camera
     commands.spawn(
@@ -351,58 +360,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>)
     // make lunex cursor
     commands.spawn((Cursor::new(0.0), Transform::default(), MainMouseCursor));
 
-    // create lunex ui tree
-    let mut ui = UiTree::new("ui");
-
-    // root widget
-    let root = Widget::create(
-            &mut ui,
-            "root",
-            RelativeLayout{
-                relative_1 : Vec2 { x: 0.0, y: 0.0 },
-                relative_2 : Vec2 { x: 100.0, y: 100.0 },
-                ..Default::default()
-            }
-        ).unwrap();
-
-    // connection status text
-    let text_base = Widget::create(
-            &mut ui,
-            root.end("text"),
-            RelativeLayout{  //upper right corner
-                relative_1: Vec2 { x: 70., y: 0. },
-                relative_2: Vec2 { x: 100., y: 20. },
-                ..Default::default()
-            }
-        ).unwrap();
-    connection_status_section(&mut commands, &asset_server, &mut ui, text_base);
-
-    // button owner text
-    let owner_base = Widget::create(
-            &mut ui,
-            root.end("owner"),
-            RelativeLayout{  //above button
-                relative_1: Vec2 { x: 37., y: 15. },
-                relative_2: Vec2 { x: 63., y: 35. },
-                ..Default::default()
-            }
-        ).unwrap();
-    button_owner_section(&mut commands, &asset_server, &mut ui, owner_base);
-
-    // button
-    let button_base = Widget::create(
-            &mut ui,
-            root.end("button"),
-            RelativeLayout{
-                relative_1 : Vec2 { x: 35.0, y: 40.0 },
-                relative_2 : Vec2 { x: 65.0, y: 60.0 },
-                ..Default::default()
-            }
-        ).unwrap();
-    button_section(&mut commands, &asset_server, &mut ui, button_base);
-
-    // add ui tree to ecs
-    commands.spawn((ui, MainUI));
+    // prepare lunex ui tree
+    commands.insert_resource(StyleStackRes::<MainUI>::default());
+    commands.spawn((UiTree::new("ui"), MainUI));
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -544,7 +504,8 @@ fn main()
         .register_interaction_source(MouseLButtonMain::default())
         .insert_resource(client)
         .insert_resource(ConnectionStatus::Connecting)
-        .add_systems(Startup, setup)
+        .add_systems(PreStartup, setup)
+        .add_systems(Startup, build_ui)
         .add_systems(PreUpdate, handle_connection_changes)
         .add_systems(Update,
             (

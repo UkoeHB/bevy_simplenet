@@ -37,7 +37,7 @@ struct ButtonState(Option<u128>);
 
 fn setup(mut react_commands: ReactCommands)
 {
-    let _ = react_commands.add_resource_mutation_reactor::<ButtonState>(
+    let _ = react_commands.on_resource_mutation::<ReactRes<ButtonState>>(
             move |world| { syscall(world, (), send_new_button_state); }
         );
 }
