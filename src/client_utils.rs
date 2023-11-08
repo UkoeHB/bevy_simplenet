@@ -8,7 +8,7 @@ use bincode::Options;
 use core::fmt::Debug;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -99,12 +99,13 @@ pub enum ClientReport
 #[derive(Clone, Debug)]
 pub(crate) struct RequestSignalInner
 {
-    signal: Arc<AtomicU8>,
+    // we store both the inner signal and the aborted flag here so only one Arc allocation is needed
+    signal: Arc<(AtomicU8, AtomicBool)>,
 }
 
 impl RequestSignalInner {
     pub(crate) fn status(&self) -> RequestStatus {
-        match self.signal.load(Ordering::Acquire) {
+        match self.signal.0.load(Ordering::Acquire) {
             0u8 => RequestStatus::Waiting,
             1u8 => RequestStatus::Responded,
             2u8 => RequestStatus::Acknowledged,
@@ -115,17 +116,31 @@ impl RequestSignalInner {
 
     pub(crate) fn set(&self, state: RequestStatus) {
         match state {
-            RequestStatus::Waiting      => self.signal.store(0u8, Ordering::Release),
-            RequestStatus::Responded    => self.signal.store(1u8, Ordering::Release),
-            RequestStatus::Acknowledged => self.signal.store(2u8, Ordering::Release),
-            RequestStatus::Rejected     => self.signal.store(3u8, Ordering::Release),
-            RequestStatus::ResponseLost => self.signal.store(4u8, Ordering::Release),
+            RequestStatus::Waiting      => self.signal.0.store(0u8, Ordering::Release),
+            RequestStatus::Responded    => self.signal.0.store(1u8, Ordering::Release),
+            RequestStatus::Acknowledged => self.signal.0.store(2u8, Ordering::Release),
+            RequestStatus::Rejected     => self.signal.0.store(3u8, Ordering::Release),
+            RequestStatus::ResponseLost => self.signal.0.store(4u8, Ordering::Release),
             _ => panic!("invalid request status sent to RequestSignalInner"),
         }
     }
+
+    fn abort(&self)
+    {
+        self.set(RequestStatus::ResponseLost);
+        self.signal.1.store(true, Ordering::Release);
+    }
+
+    fn is_aborted(&self) -> bool
+    {
+        self.signal.1.load(Ordering::Acquire)
+    }
 }
 
-impl Default for RequestSignalInner { fn default() -> Self { Self { signal: Arc::new(AtomicU8::new(0u8)) } } }
+impl Default for RequestSignalInner { fn default() -> Self
+{
+    Self { signal: Arc::new((AtomicU8::new(0u8), AtomicBool::new(false))) } }
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -136,7 +151,6 @@ pub struct RequestSignal
     request_id     : u64,
     message_signal : MessageSignal,
     request_signal : RequestSignalInner,
-    aborted        : bool,
 }
 
 impl RequestSignal
@@ -148,7 +162,6 @@ impl RequestSignal
             request_id,
             message_signal,
             request_signal: RequestSignalInner::default(),
-            aborted: false,
         }
     }
 
@@ -165,22 +178,21 @@ impl RequestSignal
         {
             MessageStatus::Sending => 
             {
-                match self.aborted
+                match self.inner().is_aborted()
                 {
                     true  => RequestStatus::Aborted,
                     false => RequestStatus::Sending,
                 }
             }
-            MessageStatus::Sent   => self.request_signal.status(),
+            MessageStatus::Sent   => self.inner().status(),
             MessageStatus::Failed => RequestStatus::SendFailed,
         }
     }
 
     /// Abort the request.
-    pub(crate) fn abort(&mut self)
+    pub(crate) fn abort(&self)
     {
-        self.inner().set(RequestStatus::ResponseLost);
-        self.aborted = true;
+        self.inner().abort();
     }
 
     /// Access the inner request signal tracker.

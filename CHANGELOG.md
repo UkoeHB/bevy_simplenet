@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1]
+
+### Fixed
+
+- `RequestSignal` now stores its aborted flag as an `Arc<AtomicBool>` so changes are visibile between signal clones.
+
+
 ## [0.3.0]
 
 ### Fixed
