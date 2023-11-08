@@ -3,12 +3,12 @@ use crate::*;
 
 //third-party shortcuts
 use bincode::Options;
-use enfync::Handle;
 
 //standard shortcuts
 use core::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -21,7 +21,8 @@ use std::sync::{Arc, Mutex};
 /// 2) Wait for [`Client::is_dead()`] to return true. Note that on WASM targets you cannot busy-wait since doing so
 ///    will block the client backend.
 /// 3) Call [`Client::next_val()`] to drain any lingering server values.
-/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`].
+/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`],
+///    and [`RequestStatus::Sending`] requests to [`RequestStatus::Aborted`].
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Client<Channel: ChannelPack>
@@ -36,10 +37,12 @@ pub struct Client<Channel: ChannelPack>
     connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
     /// receiver for messages sent by the server
     server_val_receiver: crossbeam::channel::Receiver<ServerValFrom<Channel>>,
-    /// signal for when the internal client is shut down
-    client_closed_signal: enfync::PendingResult<()>,
     /// synchronized tracker for pending requests
     pending_requests: Arc<Mutex<PendingRequestTracker>>,
+    /// signal for when the internal client is shut down
+    client_closed_signal: Arc<AtomicBool>,
+    /// flag indicating the client closed itself
+    closed: Arc<AtomicBool>,
 }
 
 impl<Channel: ChannelPack> Client<Channel>
@@ -76,15 +79,17 @@ impl<Channel: ChannelPack> Client<Channel>
     /// will fail if the underlying client becomes disconnected. If a reconnect cycle is very short then a pending request
     /// may complete successfully, but most of the time pending requests will fail after a disconnect.
     ///
-    /// Returns `Err` if the client is dead (todo: calls to [`Client::is_dead()`] may return false for a short time
-    /// after this returns `Err`).
+    /// Returns `Err` if the client is dead.
     pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
     {
-        if self.is_dead() { tracing::warn!("tried to send request to dead client"); return Err(()); }
-
         // prep request id
         let Ok(mut pending_requests) = self.pending_requests.lock() else { return Err(()); };
         let request_id = pending_requests.reserve_id();
+
+        // check client liveliness
+        // - we do this after locking the pending requests cache in order to synchronize with dropping the internal
+        //   client handler
+        if self.is_dead() { tracing::warn!("tried to send request to dead client"); return Err(()); }
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
@@ -134,15 +139,13 @@ impl<Channel: ChannelPack> Client<Channel>
     ///   dies.
     pub fn is_dead(&self) -> bool
     {
-        self.client_closed_signal.done()
+        self.closed.load(Ordering::Acquire) || self.client_closed_signal.load(Ordering::Acquire)
     }
 
     /// Close the client.
     ///
     /// Any in-progress messages may or may not fail once this method is called. Messages sent after this method is called
-    /// will fail. TODO: wait until the send status of the
-    /// last-sent message is finalized before fully closing the client, start returning errors on `send()` as
-    /// soon as `close()` is called.
+    /// will fail.
     pub fn close(&self)
     {
         // sanity check
@@ -166,6 +169,9 @@ impl<Channel: ChannelPack> Client<Channel>
         {
             tracing::error!(?err, "failed to forward connection event to client");
         }
+
+        // mark the client as closed
+        self.closed.store(true, Ordering::Release);
     }
 }
 
@@ -253,7 +259,9 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         let connection_report_sender_clone = connection_report_sender.clone();
         let pending_requests = Arc::new(Mutex::new(PendingRequestTracker::default()));
         let pending_requests_clone = pending_requests.clone();
-        let (client, mut client_task_handle) = ezsockets::connect_with(
+        let client_closed_signal = Arc::new(AtomicBool::new(false));
+        let client_closed_signal_clone = client_closed_signal.clone();
+        let (client, _client_task_handle) = ezsockets::connect_with(
                 move |client|
                 {
                     ClientHandler::<Channel>{
@@ -262,24 +270,12 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                             connection_report_sender: connection_report_sender_clone,
                             server_val_sender,
                             pending_requests: pending_requests_clone,
-                            last_acked_sync_point: 0u64,
+                            last_sync_point: 0u64,
+                            client_closed_signal: client_closed_signal_clone,
                         }
                 },
                 client_config,
                 client_connector,
-            );
-
-        // track client closure
-        let client_closed_signal = runtime_handle.spawn(
-                async move {
-                    if let Err(err) = client_task_handle
-                        .extract()
-                        .await
-                        .unwrap_or(Err(ezsockets::Error::from("client task crashed")))
-                    {
-                        tracing::error!(err, "client closed with error");
-                    }
-                }
             );
 
         // finish assembling our client
@@ -291,8 +287,9 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                 connection_report_sender,
                 connection_report_receiver,
                 server_val_receiver,
-                client_closed_signal,
                 pending_requests,
+                client_closed_signal,
+                closed: Arc::new(AtomicBool::new(false)),
             }
     }
 }

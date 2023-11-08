@@ -143,12 +143,20 @@ impl<Channel: ChannelPack> Server<Channel>
     /// - Returns `Err` if an internal server error occurs.
     pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse) -> Result<(), ()>
     {
+        // check server liveness
         let client_id  = token.client_id();
         let request_id = token.request_id();
         if self.is_dead()
         {
             tracing::warn!(client_id, request_id, "tried to send response to session but server is dead");
             return Err(());
+        }
+
+        // check token liveness
+        if token.destination_is_dead()
+        {
+            tracing::debug!(client_id, request_id, "tried to send response to dead session");
+            return Ok(());
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
@@ -171,12 +179,20 @@ impl<Channel: ChannelPack> Server<Channel>
     /// An acknowledged request cannot be responded to.
     pub fn acknowledge(&self, token: RequestToken) -> Result<(), ()>
     {
+        // check server liveness
         let client_id  = token.client_id();
         let request_id = token.request_id();
         if self.is_dead()
         {
             tracing::warn!(client_id, request_id, "tried to send ack to session but server is dead");
             return Err(());
+        }
+
+        // check token liveness
+        if token.destination_is_dead()
+        {
+            tracing::debug!(client_id, request_id, "tried to send response to dead session");
+            return Ok(());
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())

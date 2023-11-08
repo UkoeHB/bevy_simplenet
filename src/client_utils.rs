@@ -136,6 +136,7 @@ pub struct RequestSignal
     request_id     : u64,
     message_signal : MessageSignal,
     request_signal : RequestSignalInner,
+    aborted        : bool,
 }
 
 impl RequestSignal
@@ -147,6 +148,7 @@ impl RequestSignal
             request_id,
             message_signal,
             request_signal: RequestSignalInner::default(),
+            aborted: false,
         }
     }
 
@@ -161,10 +163,24 @@ impl RequestSignal
     {
         match self.message_signal.status()
         {
-            MessageStatus::Sending => RequestStatus::Sending,
-            MessageStatus::Sent    => self.request_signal.status(),
-            MessageStatus::Failed  => RequestStatus::SendFailed,
+            MessageStatus::Sending => 
+            {
+                match self.aborted
+                {
+                    true  => RequestStatus::Aborted,
+                    false => RequestStatus::Sending,
+                }
+            }
+            MessageStatus::Sent   => self.request_signal.status(),
+            MessageStatus::Failed => RequestStatus::SendFailed,
         }
+    }
+
+    /// Abort the request.
+    pub(crate) fn abort(&mut self)
+    {
+        self.inner().set(RequestStatus::ResponseLost);
+        self.aborted = true;
     }
 
     /// Access the inner request signal tracker.
@@ -207,10 +223,12 @@ impl PendingRequestTracker
     }
 
     /// Set the status of a pending request and remove it from the tracker.
-    pub(crate) fn set_status_and_remove(&mut self, request_id: u64, status: RequestStatus)
+    pub(crate) fn set_status_and_remove(&mut self, request_id: u64, status: RequestStatus) -> bool
     {
-        let Some(signal) = self.pending_requests.remove(&request_id) else { return; };
+        let Some(signal) = self.pending_requests.remove(&request_id) else { return false; };
         signal.inner().set(status);
+
+        true
     }
 
     /// Try to send a sync request to the server.
@@ -247,14 +265,17 @@ impl PendingRequestTracker
                     if signal.status() != RequestStatus::SendFailed { return false; }
                     true
                 }
-            ).map(|(_, signal)| signal )
+            ).map(|(_, signal)| signal)
     }
 
     /// Handle a sync response from the server.
     ///
-    /// We mark all pending requests lower than the server's earliest-seen request as [`RequestStatus::ResponseLost`].
+    /// We mark all non-sending requests lower than the server's earliest-seen request as [`RequestStatus::ResponseLost`].
     ///
-    /// Failed requests are drained.
+    /// Failed requests are drained, while sending requests are ignored.
+    ///
+    /// LEAK SAFETY: This method can leak pending requests that are currently [`RequestStatus::Sending`].
+    ///              Callers must guarantee that leaks will be handled.
     pub(crate) fn handle_sync_response(&mut self, response: SyncResponse) -> Option<impl Iterator<Item = RequestSignal> + '_>
     {
         // ignore response if not responding to latest request
@@ -267,10 +288,23 @@ impl PendingRequestTracker
                 move |id, signal| -> bool
                 {
                     if *id >= earliest_req { return false; }
+                    if signal.status() == RequestStatus::Sending { return false; }
                     signal.inner().set(RequestStatus::ResponseLost);
                     true
                 }
-            ).map(|(_, signal)| signal ))
+            ).map(|(_, signal)| signal))
+    }
+
+    /// Abort and drain all pending requests.
+    pub(crate) fn abort_all(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    {
+        self.pending_requests.drain_filter(
+                move |_, signal| -> bool
+                {
+                    signal.abort();
+                    true
+                }
+            ).map(|(_, signal)| signal)
     }
 
     /// Set the latest sync request id.

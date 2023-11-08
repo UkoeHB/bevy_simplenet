@@ -440,7 +440,8 @@ fn handle_server_incoming(
                 commands.add(deselect_callback.clone());
             }
             DemoServerVal::SendFailed(request_id)   |
-            DemoServerVal::ResponseLost(request_id) =>
+            DemoServerVal::ResponseLost(request_id) |
+            DemoServerVal::Aborted(request_id) =>
             {
                 if !pending_select.equals_request(request_id) { continue; }
 

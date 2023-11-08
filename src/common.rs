@@ -22,7 +22,7 @@ pub enum RequestStatus
     Sending,
     /// The request was sent and now we are waiting for a response.
     ///
-    /// If disconnected while in this state, the request status will change to `ResponseLost` when the client reconnects.
+    /// If disconnected while in this state, the request status will change to `ResponseLost`.
     Waiting,
     /// The server responded to the request.
     Responded,
@@ -36,8 +36,13 @@ pub enum RequestStatus
     ///
     /// The request may have been responded to, acknowledged, or rejected, but we will never know.
     ///
-    /// Note that if you drop the client, any waiting requests will be set to `ResponseLost`.
+    /// Note that if you drop the client, any `Waiting` requests will be set to `ResponseLost`.
     ResponseLost,
+    /// The request was aborted while `Sending`.
+    ///
+    /// The request status will eventually change to either `SendFailed` or `ResponseLost` after the send status is
+    /// resolved.
+    Aborted,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -86,6 +91,12 @@ pub enum ServerVal<ServerMsg, ServerResponse>
     ///
     /// This variant is only constructed in the client.
     ResponseLost(u64),
+    /// A request was aborted while sending.
+    ///
+    /// The request status will eventually transition from `Aborted` to either `SendFailed` or `ResponseLost`.
+    ///
+    /// This variant is only constructed in the client.
+    Aborted(u64),
 }
 
 impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
@@ -101,6 +112,7 @@ impl<ServerMsg, ServerResponse> ServerVal<ServerMsg, ServerResponse>
             Self::Reject(id)       => Some((*id, RequestStatus::Rejected)),
             Self::SendFailed(id)   => Some((*id, RequestStatus::SendFailed)),
             Self::ResponseLost(id) => Some((*id, RequestStatus::ResponseLost)),
+            Self::Aborted(id)      => Some((*id, RequestStatus::Aborted)),
         }
     }
 }
