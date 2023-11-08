@@ -20,9 +20,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// 1) Call [`Client::close()`].
 /// 2) Wait for [`Client::is_dead()`] to return true. Note that on WASM targets you cannot busy-wait since doing so
 ///    will block the client backend.
-/// 3) Call [`Client::next_val()`] to drain any lingering server values.
-/// 4) Drop the client. This will set any [`RequestStatus::Waiting`] requests to [`RequestStatus::ResponseLost`],
-///    and [`RequestStatus::Sending`] requests to [`RequestStatus::Aborted`].
+/// 3) Call [`Client::next_val()`] to drain any lingering server values. Note that [`ServerVal::Aborted`] values
+///    can appear in this step if requests were [`RequestStatus::Sending`] when the client backend was dropped.
+/// 4) Drop the client.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Client<Channel: ChannelPack>
@@ -52,10 +52,10 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is dead.
+    /// Returns `Err` if the client is closed.
     pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
     {
-        if self.is_dead() { tracing::warn!("tried to send message to dead client"); return Err(()); }
+        if self.is_closed() { tracing::warn!("tried to send message to closed client"); return Err(()); }
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMetaFrom::<Channel>::Msg(msg))
@@ -74,11 +74,11 @@ impl<Channel: ChannelPack> Client<Channel>
 
     /// Send a request to the server.
     ///
-    /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Messages
+    /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Requests
     /// will fail if the underlying client becomes disconnected. If a reconnect cycle is very short then a pending request
     /// may complete successfully, but most of the time pending requests will fail after a disconnect.
     ///
-    /// Returns `Err` if the client is dead.
+    /// Returns `Err` if the client is closed.
     pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
     {
         // prep request id
@@ -88,7 +88,7 @@ impl<Channel: ChannelPack> Client<Channel>
         // check client liveliness
         // - we do this after locking the pending requests cache in order to synchronize with dropping the internal
         //   client handler
-        if self.is_dead() { tracing::warn!("tried to send request to dead client"); return Err(()); }
+        if self.is_closed() { tracing::warn!("tried to send request to closed client"); return Err(()); }
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
@@ -134,11 +134,19 @@ impl<Channel: ChannelPack> Client<Channel>
     }
 
     /// Test if the client is dead (no longer connected to server and won't reconnect).
-    /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next_report()`] when the client's internal actor
-    ///   dies.
+    /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next_report()`] when the client backend dies.
+    ///
+    /// Once this returns true you can drain the client by calling [`Client::next_val()`] until no more values appear.
+    /// After the client is drained, [`Client::next_val()`] will always return `None`.
     pub fn is_dead(&self) -> bool
     {
-        self.closed.load(Ordering::Acquire) || self.client_closed_signal.load(Ordering::Acquire)
+        self.client_closed_signal.load(Ordering::Acquire)
+    }
+
+    /// Test if the client is closed (messages and requests can no longer be submitted).
+    pub fn is_closed(&self) -> bool
+    {
+        self.closed.load(Ordering::Acquire) || self.is_dead()
     }
 
     /// Close the client.
@@ -148,7 +156,7 @@ impl<Channel: ChannelPack> Client<Channel>
     pub fn close(&self)
     {
         // sanity check
-        if self.is_dead() { tracing::warn!("tried to close an already dead client"); return; }
+        if self.is_closed() { tracing::warn!("tried to close an already closed client"); return; }
         tracing::info!("client closing self");
 
         // close the client

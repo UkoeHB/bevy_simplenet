@@ -43,7 +43,7 @@ pub enum RequestStatus
     /// The request status will eventually change to either `SendFailed` or `ResponseLost` after the send status is
     /// resolved.
     ///
-    /// This status can only appear when dropping the client.
+    /// This status can only appear when [`Client::is_dead()`] is true.
     Aborted,
 }
 
@@ -97,7 +97,7 @@ pub enum ServerVal<ServerMsg, ServerResponse>
     ///
     /// The request status will eventually transition from `Aborted` to either `SendFailed` or `ResponseLost`.
     ///
-    /// This variant is only constructed in the client, and will only be emitted when the client is being dropped.
+    /// This variant is only constructed in the client, and will only be emitted when [`Client::is_dead()`] is true.
     Aborted(u64),
 }
 

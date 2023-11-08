@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2]
+
+### Fixed
+
+- `Client::is_dead()` now properly synchronizes with the the client output stream so you can reliably drain the client after it returns true.
+
+
 ## [0.3.1]
 
 ### Fixed

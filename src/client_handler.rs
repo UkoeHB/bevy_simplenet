@@ -332,11 +332,6 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
         // lock the pending requests cache
         let Ok(mut pending_requests) = self.pending_requests.lock() else { return; };
 
-        // mark the client as dead
-        // - we do this before cleaning up pending requests in order to synchronize with the client API, where we
-        //   don't want to send any requests after the pending requests queue is drained
-        self.client_closed_signal.store(true, Ordering::Release);
-
         // forward event to client owner
         if let Err(err) = self.connection_report_sender.send(ClientReport::IsDead)
         {
@@ -367,6 +362,13 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
                 }
             }
         }
+
+        // mark the client as dead
+        // - We do this within the pending requests lock but after cleaning pending requests in order to synchronize
+        //   with the client API. We want to prevent the client from sending requests after this lock zone, and we also
+        //   want `Client::is_dead()` to only be true after the pending requests cache has been drained so that subsequent
+        //   calls to `Client::next_val()` will reliably drain the client.
+        self.client_closed_signal.store(true, Ordering::Release);
     }
 }
 
