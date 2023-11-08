@@ -288,6 +288,8 @@ impl PendingRequestTracker
                 move |id, signal| -> bool
                 {
                     if *id >= earliest_req { return false; }
+
+                    //todo: consider just calling signal.abort() here instead of waiting for send status to resolve
                     if signal.status() == RequestStatus::Sending { return false; }
                     signal.inner().set(RequestStatus::ResponseLost);
                     true

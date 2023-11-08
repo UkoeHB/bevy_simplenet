@@ -52,8 +52,7 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is dead (todo: calls to [`Client::is_dead()`] may return false for a short time
-    /// after this returns `Err`).
+    /// Returns `Err` if the client is dead.
     pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
     {
         if self.is_dead() { tracing::warn!("tried to send message to dead client"); return Err(()); }

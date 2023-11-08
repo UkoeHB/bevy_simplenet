@@ -129,7 +129,6 @@ impl RequestToken
     ///
     /// Request tokens are tied to a specific server session. When a client reconnects they get a new session and
     /// old request tokens become invalid.
-    //todo: consider allowing request tokens to persist across reconnects
     pub fn destination_is_dead(&self) -> bool
     {
         self.death_signal.load(Ordering::Relaxed)

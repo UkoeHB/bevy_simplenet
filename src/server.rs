@@ -240,7 +240,6 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Try to get the next available connection report.
     pub fn next_report(&self) -> Option<ServerReport<Channel::ConnectMsg>>
     {
-        //todo: count connections
         let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
         Some(msg)
     }
