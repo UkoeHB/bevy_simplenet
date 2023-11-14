@@ -95,25 +95,23 @@ async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
 pub struct Server<Channel: ChannelPack>
 {
-    /// the server's address
+    /// The server's address.
     server_address: SocketAddr,
-    /// whether or not the server uses TLS
+    /// Indicates whether or not the server uses TLS.
     uses_tls: bool,
-    /// number of current connections
+    /// The number of current connections.
     connection_counter: ConnectionCounter,
 
-    /// sends messages to the internal connection handler
-    server_val_sender: tokio::sync::mpsc::UnboundedSender<
+    /// Sends client events to the internal connection handler.
+    client_event_sender: tokio::sync::mpsc::UnboundedSender<
         SessionTargetMsg<SessionID, SessionCommand<Channel>>
     >,
-    /// receives reports from the internal connection handler
-    connection_report_receiver: crossbeam::channel::Receiver<ServerReport<Channel::ConnectMsg>>,
-    /// receives client messages from the internal connection handler
-    client_val_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>,
+    /// Receives server events from the internal connection handler.
+    server_event_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>,
 
-    /// signal indicates if server internal worker has stopped
+    /// A signal that indicates if the server's internal worker has stopped.
     server_closed_signal: enfync::PendingResult<()>,
-    /// signal indicates if server runner has stopped
+    /// A signal that indicates if the server runner has stopped.
     server_running_signal: enfync::PendingResult<()>,
 }
 
@@ -127,8 +125,8 @@ impl<Channel: ChannelPack> Server<Channel>
         if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return Err(()); }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
-        if let Err(err) = self.server_val_sender.send(
-                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Msg(msg), None))
+        if let Err(err) = self.client_event_sender.send(
+                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Msg(msg), None))
             )
         {
             tracing::error!(?err, "failed to forward message to session");
@@ -161,9 +159,12 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         let (request_id, death_signal) = token.take();
-        if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
+        if let Err(err) = self.client_event_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Response(response, request_id), Some(death_signal))
+                SessionCommand::<Channel>::Send(
+                    ClientMetaEventFrom::<Channel>::Response(response, request_id),
+                    Some(death_signal)
+                )
             ))
         {
             tracing::error!(?err, "failed to forward response to session");
@@ -178,7 +179,7 @@ impl<Channel: ChannelPack> Server<Channel>
     /// - Returns `Err` if an internal server error occurs.
     ///
     /// An acknowledged request cannot be responded to.
-    pub fn acknowledge(&self, token: RequestToken) -> Result<(), ()>
+    pub fn ack(&self, token: RequestToken) -> Result<(), ()>
     {
         // check server liveness
         let client_id  = token.client_id();
@@ -198,9 +199,9 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         let (request_id, death_signal) = token.take();
-        if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
+        if let Err(err) = self.client_event_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Ack(request_id), Some(death_signal))
+                SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Ack(request_id), Some(death_signal))
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");
@@ -218,7 +219,7 @@ impl<Channel: ChannelPack> Server<Channel>
 
     /// Close the target session.
     ///
-    /// Note: The target session may remain open until some time after this method is called.
+    /// The target session may remain open until some time after this method is called.
     pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
@@ -228,7 +229,7 @@ impl<Channel: ChannelPack> Server<Channel>
             tracing::warn!(id, "tried to close session but server is dead");
             return Err(());
         }
-        if let Err(err) = self.server_val_sender.send(
+        if let Err(err) = self.client_event_sender.send(
                 SessionTargetMsg::new(id, SessionCommand::<Channel>::Close(close_frame))
             )
         {
@@ -239,17 +240,10 @@ impl<Channel: ChannelPack> Server<Channel>
         Ok(())
     }
 
-    /// Try to get the next available connection report.
-    pub fn next_report(&self) -> Option<ServerReport<Channel::ConnectMsg>>
+    /// Get the next available server event
+    pub fn next(&self) -> Option<(SessionID, ServerEventFrom<Channel>)>
     {
-        let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
-        Some(msg)
-    }
-
-    /// Try to extract the next available value from a client.
-    pub fn next_val(&self) -> Option<(SessionID, ClientValFrom<Channel>)>
-    {
-        let Ok(msg) = self.client_val_receiver.try_recv() else { return None; };
+        let Ok(msg) = self.server_event_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
     }
 
@@ -259,7 +253,7 @@ impl<Channel: ChannelPack> Server<Channel>
         make_websocket_url(self.uses_tls, self.server_address).unwrap()
     }
 
-    /// Get number of connections.
+    /// Get the number of client connections.
     pub fn num_connections(&self) -> u64
     {
         self.connection_counter.load()
@@ -304,15 +298,11 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
     where
         A: std::net::ToSocketAddrs + Send + 'static,
     {
-        // prepare message channels that point out of connection handler
+        // prepare message channel that points out of the connection handler
         let (
-                connection_report_sender,
-                connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ServerReport<Channel::ConnectMsg>>();
-        let (
-                client_val_sender,
-                client_val_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>();
+                server_event_sender,
+                server_event_receiver
+            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>();
 
         // prepare connection counter
         // - this is used to communication the current number of connections from the connection handler to the
@@ -329,9 +319,8 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
                         ConnectionHandler::<Channel>{
                                 config,
                                 connection_counter: connection_counter_clone,
-                                connection_report_sender,
                                 session_registry: HashMap::default(),
-                                client_val_sender,
+                                server_event_sender,
                             }
                     )
             })).unwrap();
@@ -378,9 +367,8 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
                 server_address,
                 uses_tls,
                 connection_counter,
-                server_val_sender: server.into(),  //extract the call sender
-                connection_report_receiver,
-                client_val_receiver,
+                client_event_sender: server.into(),  //extract the call sender
+                server_event_receiver,
                 server_closed_signal,
                 server_running_signal,
             }

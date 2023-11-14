@@ -26,12 +26,19 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["bevy", "client", "server"]
 
+# Enable bevy integration.
 bevy = ["dep:bevy_ecs"]
 
+# Enable clients.
 client = []
 
-server      = ["axum", "axum-server", "ezsockets/axum", "ezsockets/server", "tokio"]
+# Enable servers.
+server = ["axum", "axum-server", "ezsockets/axum", "ezsockets/server", "tokio"]
+
+# Enable server TLS with tls-rustls.
 tls-rustls  = ["axum-server/tls-rustls"]
+
+# Enable server TLS with tls-openssl.
 tls-openssl = ["axum-server/tls-openssl"]
 
 [dependencies]

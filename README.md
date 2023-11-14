@@ -37,7 +37,7 @@ On WASM targets the client backend will not update while any other tasks are run
 - A client's [`AuthRequest`] type must match the corresponding server's [`Authenticator`] type.
 - Client ids are defined by clients via their [`AuthRequest`] when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
 - Client connect messages will be cloned for all reconnect attempts, so they should be treated as static data.
-- Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`] and [`Client::request()`] to track the status of a message. Client request results will always be emitted by [`Client::next_val()`]. Message tracking is not available for servers.
+- Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`] and [`Client::request()`] to track the status of a message. Client request results will always be emitted by [`Client::next()`]. Message tracking is not available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.
 
 
@@ -46,8 +46,13 @@ On WASM targets the client backend will not update while any other tasks are run
 
 ```rust
 // path shortcuts
+use bevy_simplenet::{
+    ChannelPack, ClientEventFrom, ServerEventFrom,
+    ServerFactory, ClientFactory, ServerReport, ClientReport,
+    AcceptorConfig, Authenticator, ServerConfig, AuthRequest,
+    ClientConfig, MessageStatus, RequestStatus, EnvType
+};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -64,7 +69,7 @@ pub struct TestClientMsg(pub u64);
 
 #[derive(Debug, Clone)]
 pub struct TestChannel;
-impl bevy_simplenet::ChannelPack for TestChannel
+impl ChannelPack for TestChannel
 {
     type ConnectMsg = TestConnectMsg;
     type ServerMsg = TestServerMsg;
@@ -73,22 +78,20 @@ impl bevy_simplenet::ChannelPack for TestChannel
     type ClientRequest = ();
 }
 
-type TestServer = bevy_simplenet::Server<TestChannel>;
-type TestClient = bevy_simplenet::Client<TestChannel>;
-type TestServerVal = bevy_simplenet::ServerValFrom<TestChannel>;
-type TestClientVal = bevy_simplenet::ClientValFrom<TestChannel>;
+type TestClientEvent = ClientEventFrom<TestChannel>;
+type TestServerEvent = ServerEventFrom<TestChannel>;
 
-fn server_factory() -> bevy_simplenet::ServerFactory<TestChannel>
+fn server_factory() -> ServerFactory<TestChannel>
 {
     // It is recommended to make server/client factories with baked-in protocol versions (e.g.
     //   with env!("CARGO_PKG_VERSION")).
-    bevy_simplenet::ServerFactory::<TestChannel>::new("test")
+    ServerFactory::<TestChannel>::new("test")
 }
 
-fn client_factory() -> bevy_simplenet::ClientFactory<TestChannel>
+fn client_factory() -> ClientFactory<TestChannel>
 {
-    // You must use the same protocol version string as the server.
-    bevy_simplenet::ClientFactory::<TestChannel>::new("test")
+    // You must use the same protocol version string as the server factory.
+    ClientFactory::<TestChannel>::new("test")
 }
 
 
@@ -106,9 +109,9 @@ tracing::info!("README test start");
 let server = server_factory().new_server(
         enfync::builtin::native::TokioHandle::default(),
         "127.0.0.1:0",
-        bevy_simplenet::AcceptorConfig::Default,
-        bevy_simplenet::Authenticator::None,
-        bevy_simplenet::ServerConfig::default(),
+        AcceptorConfig::Default,
+        Authenticator::None,
+        ServerConfig::default(),
     );
 assert_eq!(server.num_connections(), 0u64);
 
@@ -122,35 +125,38 @@ let client_id = 0u128;
 let client = client_factory().new_client(
         enfync::builtin::Handle::default(),  //automatically selects native/WASM runtime
         server.url(),
-        bevy_simplenet::AuthRequest::None{ client_id },
-        bevy_simplenet::ClientConfig::default(),
+        AuthRequest::None{ client_id },
+        ClientConfig::default(),
         TestConnectMsg(String::from("hello"))
     );
 sleep(sleep_duration);
 assert_eq!(server.num_connections(), 1u64);
 
 
-// read connection messages
-let bevy_simplenet::ServerReport::Connected(client_id, env_type, connect_msg) =
-    server.next_report().unwrap() else { panic!("client not connected to server"); };
-let bevy_simplenet::ClientReport::Connected =
-    client.next_report().unwrap() else { panic!("client not connected to server"); };
-assert_eq!(env_type, bevy_simplenet::EnvType::Native);
+// read connection reports
+let (
+        client_id,
+        TestServerEvent::Report(ServerReport::Connected(env_type, connect_msg))
+    ) = server.next().unwrap()
+else { todo!(); };
+let TestClientEvent::Report(ClientReport::Connected) = client.next().unwrap()
+else { todo!(); };
+assert_eq!(env_type, EnvType::Native);
 assert_eq!(connect_msg.0, String::from("hello"));
 
 
 // send message: client -> server
 let signal = client.send(TestClientMsg(42)).unwrap();
-assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Sending);
+assert_eq!(signal.status(), MessageStatus::Sending);
 sleep(sleep_duration);
-assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Sent);
+assert_eq!(signal.status(), MessageStatus::Sent);
 
 
 // read message from client
 let (
         msg_client_id,
-        TestClientVal::Msg(TestClientMsg(msg_val))
-    ) = server.next_val().unwrap()
+        TestServerEvent::Msg(TestClientMsg(msg_val))
+    ) = server.next().unwrap()
 else { todo!() };
 assert_eq!(msg_client_id, client_id);
 assert_eq!(msg_val, 42);
@@ -162,31 +168,31 @@ sleep(sleep_duration);
 
 
 // read message from server
-let TestServerVal::Msg(TestServerMsg(msg_server_val)) = client.next_val().unwrap()
+let TestClientEvent::Msg(TestServerMsg(msg_server_val)) = client.next().unwrap()
 else { todo!() };
 assert_eq!(msg_server_val, 24);
 
 
 // send request to server
 let signal = client.request(()).unwrap();
-assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
+assert_eq!(signal.status(), RequestStatus::Sending);
 sleep(sleep_duration);
-assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Waiting);
+assert_eq!(signal.status(), RequestStatus::Waiting);
 
 
 // read request from client
-let (_, TestClientVal::Request((), request_token)) = server.next_val().unwrap()
+let (_, TestServerEvent::Request((), request_token)) = server.next().unwrap()
 else { todo!() };
 
 
 // acknowledge the request (consumes the token without sending a Response)
-server.acknowledge(request_token).unwrap();
+server.ack(request_token).unwrap();
 sleep(sleep_duration);
-assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Acknowledged);
+assert_eq!(signal.status(), RequestStatus::Acknowledged);
 
 
 // read acknowledgement from server
-let TestServerVal::Ack(request_id) = client.next_val().unwrap()
+let TestClientEvent::Ack(request_id) = client.next().unwrap()
 else { todo!() };
 assert_eq!(request_id, signal.id());
 
@@ -198,12 +204,12 @@ assert_eq!(server.num_connections(), 0u64);
 
 
 // read disconnection messages
-let bevy_simplenet::ServerReport::Disconnected(client_id) = server.next_report().unwrap()
-else { panic!("client not disconnected"); };
-let bevy_simplenet::ClientReport::ClosedBySelf = client.next_report().unwrap()
-else { panic!("client not closed by self"); };
-let bevy_simplenet::ClientReport::IsDead = client.next_report().unwrap()
-else { panic!("client not dead"); };
+let (_, TestServerEvent::Report(ServerReport::Disconnected)) = server.next().unwrap()
+else { todo!() };
+let TestClientEvent::Report(ClientReport::ClosedBySelf) = client.next().unwrap()
+else { todo!() };
+let TestClientEvent::Report(ClientReport::IsDead(_)) = client.next().unwrap()
+else { todo!() };
 ```
 
 

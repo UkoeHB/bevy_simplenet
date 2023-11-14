@@ -16,62 +16,36 @@ pub(crate) const CONNECT_MSG_KEY : &'static str = "c";
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// A client request for synchronizing a server/client channel.
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-pub(crate) struct SyncRequest
-{
-    pub(crate) request_id: u64,
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// A server response for synchronizing a server/client channel.
-///
-/// Includes the client's earliest request id that the server is aware of. This number may not be zero if the client has
-/// reconnected at least once. We use the earliest request id to identify older requests that have failed due to a
-/// reconnect.
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-pub(crate) struct SyncResponse
-{
-    pub(crate) request: SyncRequest,
-    pub(crate) earliest_req: u64,
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// A server meta-message that may be received by a client.
-///
-/// Includes backend-specific and client-side messages.
+/// A meta event that may be received by a client.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) enum ServerMeta<ServerMsg, ServerResponse>
+pub(crate) enum ClientMetaEvent<ServerMsg, ServerResponse>
 {
-    Val(ServerVal<ServerMsg, ServerResponse>),
-    Sync(SyncResponse)
+    Msg(ServerMsg),
+    Response(ServerResponse, u64),
+    Ack(u64),
+    Reject(u64),
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) type ServerMetaFrom<Channel> = ServerMeta<
+pub(crate) type ClientMetaEventFrom<Channel> = ClientMetaEvent<
     <Channel as ChannelPack>::ServerMsg,
     <Channel as ChannelPack>::ServerResponse
 >;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// A client meta-message that may be received by a server.
-///
-/// Includes backend-specific and server-side messages.
+/// A meta event that may be received by a server.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) enum ClientMeta<ClientMsg, ClientRequest>
+pub(crate) enum ServerMetaEvent<ClientMsg, ClientRequest>
 {
     Msg(ClientMsg),
     Request(ClientRequest, u64),
-    Sync(SyncRequest)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub(crate) type ClientMetaFrom<Channel> = ClientMeta<
+pub(crate) type ServerMetaEventFrom<Channel> = ServerMetaEvent<
     <Channel as ChannelPack>::ClientMsg,
     <Channel as ChannelPack>::ClientRequest
 >;

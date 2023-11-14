@@ -18,23 +18,12 @@ pub enum DemoServerMsg
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum DemoServerResponse
-{
-    /// Current owner.
-    ///
-    /// Response to [`DemoClientRequest::GetState`].
-    Current(Option<u128>),
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DemoClientRequest
 {
     /// Select the button.
+    ///
+    /// Will be acked by the server.
     Select,
-    /// Request current server state.
-    GetState
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -47,7 +36,7 @@ impl bevy_simplenet::ChannelPack for DemoChannel
     type ClientMsg = ();
     type ClientRequest = DemoClientRequest;
     type ServerMsg = DemoServerMsg;
-    type ServerResponse = DemoServerResponse;
+    type ServerResponse = ();
 }
 
 //-------------------------------------------------------------------------------------------------------------------

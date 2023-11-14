@@ -19,9 +19,7 @@ fn reject_client_request<Channel: ChannelPack>(
     request_id : u64
 ){
     // pack the message
-    let packed_msg = ServerMetaFrom::<Channel>::Val(
-            ServerValFrom::<Channel>::Reject(request_id)
-        );
+    let packed_msg = ClientMetaEventFrom::<Channel>::Reject(request_id);
 
     // serialize message
     tracing::trace!(session_id, "sending request rejection to session");
@@ -46,15 +44,12 @@ pub(crate) struct ConnectionHandler<Channel: ChannelPack>
     /// counter for number of connections
     pub(crate) connection_counter: ConnectionCounter,
 
-    /// sender endpoint for reporting connection events
-    /// - receiver is in server owner
-    pub(crate) connection_report_sender: crossbeam::channel::Sender<ServerReport<Channel::ConnectMsg>>,
     /// registered sessions
     pub(crate) session_registry: HashMap<SessionID, ezsockets::Session<SessionID, ()>>,
 
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
-    pub(crate) client_val_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ClientValFrom<Channel>>>,
+    pub(crate) server_event_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>,
 }
 
 #[async_trait::async_trait]
@@ -85,8 +80,9 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
         let info = extract_connection_info(&request, &self.session_registry)?;
 
         // report the new connection
-        if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<Channel::ConnectMsg>::Connected(info.id, info.client_env_type, info.connect_msg)
+        let report = ServerReport::<Channel::ConnectMsg>::Connected(info.client_env_type, info.connect_msg);
+        if let Err(err) = self.server_event_sender.send(
+                SessionSourceMsg::new(info.id, ServerEventFrom::<Channel>::Report(report))
             )
         {
             tracing::error!(?err, "forwarding connection report failed");
@@ -101,17 +97,17 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 
         // make a session
         let session_id        = info.id;
-        let client_val_sender = self.client_val_sender.clone();
+        let server_event_sender = self.server_event_sender.clone();
         let max_msg_size      = self.config.max_msg_size;
         let rate_limit_config = self.config.rate_limit_config.clone();
 
         let session = ezsockets::Session::create(
-                move | session |
+                move |session|
                 {
                     // prep client request rejector
                     let session_clone = session.clone();
                     let request_rejector =
-                        move | request_id: u64 |
+                        move |request_id: u64|
                         {
                             reject_client_request::<Channel>(&session_clone, session_id, request_id);
                         };
@@ -120,12 +116,11 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                     SessionHandler::<Channel>{
                             id: session_id,
                             session,
-                            client_val_sender,
+                            server_event_sender,
                             max_msg_size,
                             client_env_type: info.client_env_type,
                             rate_limit_tracker: RateLimitTracker::new(rate_limit_config),
                             request_rejector: Arc::new(request_rejector),
-                            earliest_request_id: None,
                             death_signal: Arc::new(AtomicBool::new(false)),
                         }
                 },
@@ -152,8 +147,9 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
         self.session_registry.remove(&id);
 
         // send disconnect report
-        if let Err(err) = self.connection_report_sender.send(
-                ServerReport::<Channel::ConnectMsg>::Disconnected(id)
+        let report = ServerReport::<Channel::ConnectMsg>::Disconnected;
+        if let Err(err) = self.server_event_sender.send(
+                SessionSourceMsg::new(id, ServerEventFrom::<Channel>::Report(report))
             )
         {
             tracing::error!(?err, "forwarding disconnect report failed");
@@ -193,12 +189,9 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                     { tracing::debug!("dropping response targeted at dead session"); return Ok(()); }
                 }
 
-                // pack the message
-                let packed_msg = ServerMetaFrom::<Channel>::Val(msg_to_send);
-
                 // serialize message
                 tracing::trace!(session_msg.id, "sending message to session");
-                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&packed_msg)
+                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&msg_to_send)
                 else { tracing::error!(session_msg.id, "serializing message failed"); return Ok(()); };
 
                 // forward server message to target session

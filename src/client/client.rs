@@ -20,8 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// 1) Call [`Client::close()`].
 /// 2) Wait for [`Client::is_dead()`] to return true. Note that on WASM targets you cannot busy-wait since doing so
 ///    will block the client backend.
-/// 3) Call [`Client::next_val()`] to drain any lingering server values. Note that [`ServerVal::Aborted`] values
-///    can appear in this step if requests were [`RequestStatus::Sending`] when the client backend was dropped.
+/// 3) Call [`Client::next()`] to drain any lingering events. [`ClientReport::IsDead`] will be the last event.
 /// 4) Drop the client.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
@@ -31,18 +30,18 @@ pub struct Client<Channel: ChannelPack>
     client_id: u128,
     /// core websockets client
     client: ezsockets::Client<ClientHandler<Channel>>,
-    /// sender for connection events (used for 'closed by self')
-    connection_report_sender: crossbeam::channel::Sender<ClientReport>,
-    /// receiver for connection events
-    connection_report_receiver: crossbeam::channel::Receiver<ClientReport>,
-    /// receiver for messages sent by the server
-    server_val_receiver: crossbeam::channel::Receiver<ServerValFrom<Channel>>,
+    /// sender for client events
+    client_event_sender: crossbeam::channel::Sender<ClientEventFrom<Channel>>,
+    /// receiver for client events
+    client_event_receiver: crossbeam::channel::Receiver<ClientEventFrom<Channel>>,
     /// synchronized tracker for pending requests
     pending_requests: Arc<Mutex<PendingRequestTracker>>,
+    /// signal for when the internal client is connected
+    client_connected_signal: Arc<AtomicBool>,
     /// signal for when the internal client is shut down
     client_closed_signal: Arc<AtomicBool>,
     /// flag indicating the client closed itself
-    closed: Arc<AtomicBool>,
+    closed_by_self: Arc<AtomicBool>,
 }
 
 impl<Channel: ChannelPack> Client<Channel>
@@ -52,13 +51,14 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is closed.
+    /// Returns `Err` if the client is not connected.
     pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
     {
-        if self.is_closed() { tracing::warn!("tried to send message to closed client"); return Err(()); }
+        // check if connected
+        if !self.is_connected() { tracing::warn!("tried to send message to disconnected client"); return Err(()); }
 
         // forward message to server
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ClientMetaFrom::<Channel>::Msg(msg))
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ServerMetaEventFrom::<Channel>::Msg(msg))
         else { tracing::error!("failed serializing client message"); return Err(()); };
 
         match self.client.binary(ser_msg)
@@ -75,24 +75,25 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Send a request to the server.
     ///
     /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Requests
-    /// will fail if the underlying client becomes disconnected. If a reconnect cycle is very short then a pending request
-    /// may complete successfully, but most of the time pending requests will fail after a disconnect.
+    /// will fail if the underlying client becomes disconnected.
     ///
-    /// Returns `Err` if the client is closed.
+    /// Returns `Err` if the client is not connected.
     pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
     {
-        // prep request id
+        // lock pending requests
         let Ok(mut pending_requests) = self.pending_requests.lock() else { return Err(()); };
-        let request_id = pending_requests.reserve_id();
 
-        // check client liveliness
-        // - we do this after locking the pending requests cache in order to synchronize with dropping the internal
-        //   client handler
-        if self.is_closed() { tracing::warn!("tried to send request to closed client"); return Err(()); }
+        // check if connected
+        // - We do this after locking the pending requests cache in order to synchronize with dropping the internal
+        //   client handler, and to synchronize with reconnect cycles in the client backend.
+        if !self.is_connected() { tracing::warn!("tried to send request to disconnected client"); return Err(()); };
+
+        // prep request id
+        let request_id = pending_requests.reserve_id();
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
-                &ClientMetaFrom::<Channel>::Request(request, request_id)
+                &ServerMetaEventFrom::<Channel>::Request(request, request_id)
             )
         else { tracing::error!("failed serializing client request"); return Err(()); };
 
@@ -111,19 +112,12 @@ impl<Channel: ChannelPack> Client<Channel>
         }
     }
 
-    /// Try to get the next client report.
-    pub fn next_report(&self) -> Option<ClientReport>
-    {
-        let Ok(msg) = self.connection_report_receiver.try_recv() else { return None; };
-        Some(msg)
-    }
-
-    /// Try to get the next server value.
+    /// Try to get the next client event.
     ///
-    /// If the client is dead, you can safely use this to drain any lingering server values.
-    pub fn next_val(&self) -> Option<ServerValFrom<Channel>>
+    /// When the client dies, the last event emitted will be `ClientEvent::Report(ClientReport::IsDead))`.
+    pub fn next(&self) -> Option<ClientEventFrom<Channel>>
     {
-        let Ok(msg) = self.server_val_receiver.try_recv() else { return None; };
+        let Ok(msg) = self.client_event_receiver.try_recv() else { return None; };
         Some(msg)
     }
 
@@ -133,26 +127,40 @@ impl<Channel: ChannelPack> Client<Channel>
         self.client_id
     }
 
-    /// Test if the client is dead (no longer connected to server and won't reconnect).
-    /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next_report()`] when the client backend dies.
+    /// Test if the client is connected.
     ///
-    /// Once this returns true you can drain the client by calling [`Client::next_val()`] until no more values appear.
-    /// After the client is drained, [`Client::next_val()`] will always return `None`.
+    /// Messages and requests cannot be submitted when the client is not connected.
+    pub fn is_connected(&self) -> bool
+    {
+        self.client_connected_signal.load(Ordering::Acquire) && !self.is_closed()
+    }
+
+    /// Test if the client is dead (no longer connected to the server and won't reconnect).
+    /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next()`] when the client backend dies.
+    ///
+    /// Once this returns true you can drain the client by calling [`Client::next()`] until no more values appear.
+    /// After [`ClientReport::IsDead`] appears, [`Client::next()`] will always return `None`.
     pub fn is_dead(&self) -> bool
     {
         self.client_closed_signal.load(Ordering::Acquire)
     }
 
-    /// Test if the client is closed (messages and requests can no longer be submitted).
+    /// Test if the client is closed.
+    ///
+    /// Returns true after [`Client::close()`] has been called, or once the internal client dies.
+    ///
+    /// Messages and requests cannot be submitted once the client is closed.
     pub fn is_closed(&self) -> bool
     {
-        self.closed.load(Ordering::Acquire) || self.is_dead()
+        self.closed_by_self.load(Ordering::Acquire) || self.is_dead()
     }
 
     /// Close the client.
     ///
-    /// Any in-progress messages may or may not fail once this method is called. Messages sent after this method is called
-    /// will fail.
+    /// Any in-progress messages may or may not fail once this method is called. New messages and requests cannot be
+    /// sent after this method is called.
+    ///
+    /// The client will eventually emit [`ClientReport::IsDead`] once this method has been called.
     pub fn close(&self)
     {
         // sanity check
@@ -172,13 +180,15 @@ impl<Channel: ChannelPack> Client<Channel>
         }
 
         // forward event to other end of channel
-        if let Err(err) = self.connection_report_sender.send(ClientReport::ClosedBySelf)
+        if let Err(err) = self.client_event_sender.send(ClientEventFrom::<Channel>::Report(ClientReport::ClosedBySelf))
         {
             tracing::error!(?err, "failed to forward connection event to client");
         }
 
+        // note: request failures will be emitted for all pending requests when the internal client is dropped
+
         // mark the client as closed
-        self.closed.store(true, Ordering::Release);
+        self.closed_by_self.store(true, Ordering::Release);
     }
 }
 
@@ -246,12 +256,8 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
 
         let client_config = client_config.socket_config(socket_config);
 
-        // prepare message channels that point out of our client
-        let (
-                connection_report_sender,
-                connection_report_receiver
-            ) = crossbeam::channel::unbounded::<ClientReport>();
-        let (server_val_sender, server_val_receiver) = crossbeam::channel::unbounded::<ServerValFrom<Channel>>();
+        // prepare message channel that points out of our client
+        let (client_event_sender, client_event_receiver) = crossbeam::channel::unbounded::<ClientEventFrom<Channel>>();
 
         // prepare client connector
         let client_connector = {
@@ -263,10 +269,12 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
             };
 
         // make client core with our handler
-        let connection_report_sender_clone = connection_report_sender.clone();
+        let client_event_sender_clone = client_event_sender.clone();
         let pending_requests = Arc::new(Mutex::new(PendingRequestTracker::default()));
         let pending_requests_clone = pending_requests.clone();
+        let client_connected_signal = Arc::new(AtomicBool::new(false));
         let client_closed_signal = Arc::new(AtomicBool::new(false));
+        let client_connected_signal_clone = client_connected_signal.clone();
         let client_closed_signal_clone = client_closed_signal.clone();
         let (client, _client_task_handle) = ezsockets::connect_with(
                 move |client|
@@ -274,11 +282,10 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                     ClientHandler::<Channel>{
                             config,
                             client,
-                            connection_report_sender: connection_report_sender_clone,
-                            server_val_sender,
-                            pending_requests: pending_requests_clone,
-                            last_sync_point: 0u64,
-                            client_closed_signal: client_closed_signal_clone,
+                            client_event_sender     : client_event_sender_clone,
+                            pending_requests        : pending_requests_clone,
+                            client_connected_signal : client_connected_signal_clone,
+                            client_closed_signal    : client_closed_signal_clone,
                         }
                 },
                 client_config,
@@ -291,12 +298,12 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         Client{
                 client_id: auth.client_id(),
                 client,
-                connection_report_sender,
-                connection_report_receiver,
-                server_val_receiver,
+                client_event_sender,
+                client_event_receiver,
                 pending_requests,
+                client_connected_signal,
                 client_closed_signal,
-                closed: Arc::new(AtomicBool::new(false)),
+                closed_by_self: Arc::new(AtomicBool::new(false)),
             }
     }
 }

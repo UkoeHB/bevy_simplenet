@@ -20,8 +20,8 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
     /// this session
     pub(crate) session: ezsockets::Session<SessionID, ()>,
     /// sender for forwarding messages from the session's client to the server
-    pub(crate) client_val_sender: crossbeam::channel::Sender<
-        SessionSourceMsg<SessionID, ClientValFrom<Channel>>
+    pub(crate) server_event_sender: crossbeam::channel::Sender<
+        SessionSourceMsg<SessionID, ServerEventFrom<Channel>>
     >,
 
     /// config: maximum message size (bytes)
@@ -34,8 +34,6 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
 
     /// session wrapper for sending request rejections
     pub(crate) request_rejector: Arc<dyn RequestRejectorFn>,
-    /// tracks the lowest-encountered request id in order to help clients synchronize after reconnecting
-    pub(crate) earliest_request_id: Option<u64>,
 
     /// Signal used to inform request tokens of the session's death, to avoid sending responses to new sessions
     /// for requests made with old sessions.
@@ -132,26 +130,19 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
         // decide what to do with the message
         match message
         {
-            ClientMetaFrom::<Channel>::Msg(msg) =>
+            ServerMetaEventFrom::<Channel>::Msg(msg) =>
             {
                 // try to forward client message to session owner
-                if let Err(err) = self.client_val_sender.send(
-                        SessionSourceMsg::new(self.id, ClientValFrom::<Channel>::Msg(msg))
+                if let Err(err) = self.server_event_sender.send(
+                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Msg(msg))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
                     self.close("session error"); return Ok(());
                 }
             }
-            ClientMetaFrom::<Channel>::Request(request, request_id) =>
+            ServerMetaEventFrom::<Channel>::Request(request, request_id) =>
             {
-                // register the request
-                // - clients should only be sending request ids that increase
-                if self.earliest_request_id.is_none()
-                {
-                    self.earliest_request_id = Some(request_id);
-                }
-
                 // prepare token
                 let token = RequestToken::new(
                         self.id,
@@ -161,35 +152,11 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
                     );
 
                 // try to forward client request to session owner
-                if let Err(err) = self.client_val_sender.send(
-                        SessionSourceMsg::new(self.id, ClientValFrom::<Channel>::Request(request, token))
+                if let Err(err) = self.server_event_sender.send(
+                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Request(request, token))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
-                    self.close("session error"); return Ok(());
-                }
-            }
-            ClientMetaFrom::<Channel>::Sync(request) =>
-            {
-                // register the request
-                if self.earliest_request_id.is_none()
-                {
-                    self.earliest_request_id = Some(request.request_id);
-                }
-
-                // assemble sync response
-                let earliest_req = self.earliest_request_id.unwrap();
-                let sync_response = ServerMetaFrom::<Channel>::Sync(SyncResponse{ request, earliest_req });
-
-                // serialize message
-                tracing::trace!(self.id, "sending sync response to session");
-                let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&sync_response)
-                else { tracing::error!(self.id, "serializing sync response failed"); return Ok(()); };
-
-                // send sync response to client
-                if let Err(_) = self.session.binary(ser_msg)
-                {
-                    tracing::debug!(self.id, "dropping sync response sent to broken session");
                     self.close("session error"); return Ok(());
                 }
             }

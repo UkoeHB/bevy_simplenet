@@ -30,8 +30,9 @@ impl bevy_simplenet::ChannelPack for DemoChannel
 
 type _DemoServer = bevy_simplenet::Server<DemoChannel>;
 type _DemoClient = bevy_simplenet::Client<DemoChannel>;
-type DemoServerVal = bevy_simplenet::ServerValFrom<DemoChannel>;
-type DemoClientVal = bevy_simplenet::ClientValFrom<DemoChannel>;
+type DemoClientEvent = bevy_simplenet::ClientEventFrom<DemoChannel>;
+type DemoServerEvent = bevy_simplenet::ServerEventFrom<DemoChannel>;
+type DemoServerReport = bevy_simplenet::ServerReport<<DemoChannel as bevy_simplenet::ChannelPack>::ConnectMsg>;
 
 fn server_demo_factory() -> bevy_simplenet::ServerFactory<DemoChannel>
 {
@@ -86,9 +87,9 @@ fn request_response()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, ())) = websocket_server.next_report()
+    let Some((client_id, DemoServerEvent::Report(DemoServerReport::Connected(_, ())))) = websocket_server.next()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
     else { panic!("client should be connected to server"); };
     assert_eq!(websocket_server.num_connections(), 1u64);
 
@@ -102,8 +103,8 @@ fn request_response()
 
     let Some((
             msg_client_id,
-            DemoClientVal::Request(DemoClientRequest(msg_client_val), token)
-        )) = websocket_server.next_val()
+            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+        )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_id, token.client_id());
@@ -119,7 +120,7 @@ fn request_response()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(DemoServerVal::Response(DemoServerResponse(msg_server_val), request_id)) = websocket_client.next_val()
+    let Some(DemoClientEvent::Response(DemoServerResponse(msg_server_val), request_id)) = websocket_client.next()
     else { panic!("client did not receive server msg"); };
     assert_eq!(server_val, msg_server_val);
     assert_eq!(signal.id(), request_id);
@@ -127,9 +128,9 @@ fn request_response()
 
 
     // no more outputs
-    let None = websocket_server.next_report()
+    let None = websocket_server.next()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_val()
+    let None = websocket_client.next()
     else { panic!("client should receive no more values"); };
 }
 
@@ -175,9 +176,9 @@ fn request_ack()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, ())) = websocket_server.next_report()
+    let Some((client_id, DemoServerEvent::Report(DemoServerReport::Connected(_, ())))) = websocket_server.next()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
     else { panic!("client should be connected to server"); };
     assert_eq!(websocket_server.num_connections(), 1u64);
 
@@ -191,8 +192,8 @@ fn request_ack()
 
     let Some((
             msg_client_id,
-            DemoClientVal::Request(DemoClientRequest(msg_client_val), token)
-        )) = websocket_server.next_val()
+            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+        )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_id, token.client_id());
@@ -203,20 +204,20 @@ fn request_ack()
 
 
     // send ack: server -> client
-    websocket_server.acknowledge(token).unwrap();
+    websocket_server.ack(token).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(DemoServerVal::Ack(request_id)) = websocket_client.next_val()
+    let Some(DemoClientEvent::Ack(request_id)) = websocket_client.next()
     else { panic!("client did not receive server msg"); };
     assert_eq!(signal.id(), request_id);
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Acknowledged);
 
 
     // no more outputs
-    let None = websocket_server.next_report()
+    let None = websocket_server.next()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_val()
+    let None = websocket_client.next()
     else { panic!("client should receive no more values"); };
 }
 
@@ -262,9 +263,9 @@ fn request_rejected()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, ())) = websocket_server.next_report()
+    let Some((client_id, DemoServerEvent::Report(DemoServerReport::Connected(_, ())))) = websocket_server.next()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
     else { panic!("client should be connected to server"); };
     assert_eq!(websocket_server.num_connections(), 1u64);
 
@@ -278,8 +279,8 @@ fn request_rejected()
 
     let Some((
             msg_client_id,
-            DemoClientVal::Request(DemoClientRequest(msg_client_val), token)
-        )) = websocket_server.next_val()
+            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+        )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_id, token.client_id());
@@ -294,16 +295,16 @@ fn request_rejected()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(DemoServerVal::Reject(request_id)) = websocket_client.next_val()
+    let Some(DemoClientEvent::Reject(request_id)) = websocket_client.next()
     else { panic!("client did not receive server msg"); };
     assert_eq!(signal.id(), request_id);
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Rejected);
 
 
     // no more outputs
-    let None = websocket_server.next_report()
+    let None = websocket_server.next()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_val()
+    let None = websocket_client.next()
     else { panic!("client should receive no more values"); };
 }
 
@@ -353,9 +354,9 @@ fn request_dropped()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ServerReport::Connected(client_id, _, ())) = websocket_server.next_report()
+    let Some((client_id, DemoServerEvent::Report(DemoServerReport::Connected(_, ())))) = websocket_server.next()
     else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
     else { panic!("client should be connected to server"); };
     assert_eq!(websocket_server.num_connections(), 1u64);
 
@@ -369,8 +370,8 @@ fn request_dropped()
 
     let Some((
             msg_client_id,
-            DemoClientVal::Request(DemoClientRequest(msg_client_val), token)
-        )) = websocket_server.next_val()
+            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+        )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
     assert_eq!(client_id, token.client_id());
@@ -390,46 +391,46 @@ fn request_dropped()
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
-    let Some(bevy_simplenet::ClientReport::ClosedByServer(_)) = websocket_client.next_report()
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::ClosedByServer(_))) = websocket_client.next()
     else { panic!("client should be closed by server"); };
-    let Some(bevy_simplenet::ServerReport::Disconnected(dc_client_id)) = websocket_server.next_report()
+    let Some((dc_client_id, DemoServerEvent::Report(DemoServerReport::Disconnected))) = websocket_server.next()
     else { panic!("server should be disconnected after client is disconnected (by server)"); };
     assert_eq!(client_id, dc_client_id);
 
 
     // client auto-reconnects
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
-    let Some(bevy_simplenet::ServerReport::Connected(_, _, ())) = websocket_server.next_report()
-    else { panic!("server should be connected once client is connected"); };
-    let Some(bevy_simplenet::ClientReport::Connected) = websocket_client.next_report()
-    else { panic!("client should be connected to server"); };
-    assert_eq!(websocket_server.num_connections(), 1u64);
-
 
     // request has updated
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
     assert!(token.destination_is_dead());
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::ResponseLost);
 
-
     // receive response lost
-    let Some(DemoServerVal::ResponseLost(request_id)) = websocket_client.next_val()
+    let Some(DemoClientEvent::ResponseLost(request_id)) = websocket_client.next()
     else { panic!("client did not receive server msg"); };
     assert_eq!(signal.id(), request_id);
+
+    // client receives connection report
+    let Some((_, DemoServerEvent::Report(DemoServerReport::Connected(_, ())))) = websocket_server.next()
+    else { panic!("server should be connected once client is connected"); };
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
+    else { panic!("client should be connected to server"); };
+    assert_eq!(websocket_server.num_connections(), 1u64);
 
 
 
     // try to acknowledge the token (nothing should happen since the original target session was replaced)
-    websocket_server.acknowledge(token).unwrap();
+    websocket_server.ack(token).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::ResponseLost);
 
 
     // no more outputs
-    let None = websocket_server.next_report()
+    let None = websocket_server.next()
     else { panic!("server should receive no more connection reports"); };
-    let None = websocket_client.next_val()
+    let None = websocket_client.next()
     else { panic!("client should receive no more values"); };
 }
 

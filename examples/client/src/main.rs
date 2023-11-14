@@ -20,8 +20,8 @@ use wasm_timer::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoClient    = bevy_simplenet::Client<DemoChannel>;
-type DemoServerVal = bevy_simplenet::ServerValFrom<DemoChannel>;
+type DemoClient      = bevy_simplenet::Client<DemoChannel>;
+type DemoClientEvent = bevy_simplenet::ClientEventFrom<DemoChannel>;
 
 fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 {
@@ -368,62 +368,45 @@ fn setup(mut commands: Commands)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn handle_connection_changes(
-    client     : Res<DemoClient>,
-    mut status : ResMut<ConnectionStatus>
-){
-    while let Some(connection_report) = client.next_report()
-    {
-        match connection_report
-        {
-            bevy_simplenet::ClientReport::Connected         =>
-            {
-                *status = ConnectionStatus::Connected;
-                let _ = client.request(DemoClientRequest::GetState);
-            },
-            bevy_simplenet::ClientReport::Disconnected      |
-            bevy_simplenet::ClientReport::ClosedByServer(_) |
-            bevy_simplenet::ClientReport::ClosedBySelf      => *status = ConnectionStatus::Connecting,
-            bevy_simplenet::ClientReport::IsDead            => *status = ConnectionStatus::Dead,
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn handle_server_incoming(
+fn handle_client_events(
     mut commands      : Commands,
     client            : Res<DemoClient>,
+    mut status        : ResMut<ConnectionStatus>,
     mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
 ){
     let (mut pending_select, mut owner, deselect_callback) = current_state.single_mut();
 
-    while let Some(server_val) = client.next_val()
+    while let Some(client_event) = client.next()
     {
-        match server_val
+        match client_event
         {
-            DemoServerVal::Msg(message) =>
+            DemoClientEvent::Report(connection_report) => match connection_report
             {
-                match message
+                bevy_simplenet::ClientReport::Connected         => *status = ConnectionStatus::Connected,
+                bevy_simplenet::ClientReport::Disconnected      |
+                bevy_simplenet::ClientReport::ClosedByServer(_) |
+                bevy_simplenet::ClientReport::ClosedBySelf      => *status = ConnectionStatus::Connecting,
+                bevy_simplenet::ClientReport::IsDead(aborted_reqs) =>
                 {
-                    DemoServerMsg::Current(new_id) =>
+                    for aborted_req in aborted_reqs
                     {
-                        commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
+                        if !pending_select.equals_request(aborted_req) { continue; }
+
+                        // an error occurred, roll back the predicted input
+                        commands.add(deselect_callback.clone());
                     }
+                    *status = ConnectionStatus::Dead;
                 }
             }
-            DemoServerVal::Response(response, _request_id) =>
+            DemoClientEvent::Msg(message) => match message
             {
-                match response
+                DemoServerMsg::Current(new_id) =>
                 {
-                    DemoServerResponse::Current(new_id) =>
-                    {
-                        commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
-                    }
+                    // reset current state
+                    commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
                 }
             }
-            DemoServerVal::Ack(request_id) =>
+            DemoClientEvent::Ack(request_id) =>
             {
                 if !pending_select.equals_request(request_id) { continue; }
 
@@ -432,16 +415,16 @@ fn handle_server_incoming(
                 owner.predicted_id            = None;
                 pending_select.0              = None;
             }
-            DemoServerVal::Reject(request_id) =>
+            DemoClientEvent::Reject(request_id) =>
             {
                 if !pending_select.equals_request(request_id) { continue; }
 
                 // roll back predicted input
                 commands.add(deselect_callback.clone());
             }
-            DemoServerVal::SendFailed(request_id)   |
-            DemoServerVal::ResponseLost(request_id) |
-            DemoServerVal::Aborted(request_id) =>
+            DemoClientEvent::Response((), request_id) |
+            DemoClientEvent::SendFailed(request_id)    |
+            DemoClientEvent::ResponseLost(request_id)  =>
             {
                 if !pending_select.equals_request(request_id) { continue; }
 
@@ -507,10 +490,9 @@ fn main()
         .insert_resource(ConnectionStatus::Connecting)
         .add_systems(PreStartup, setup)
         .add_systems(Startup, build_ui)
-        .add_systems(PreUpdate, handle_connection_changes)
         .add_systems(Update,
             (
-                handle_server_incoming, apply_deferred,
+                handle_client_events, apply_deferred,
                 refresh_status_text,
                 refresh_button_owner_text,
             ).chain()

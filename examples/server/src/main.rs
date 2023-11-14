@@ -12,8 +12,8 @@ use std::collections::HashSet;
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-type DemoServer    = bevy_simplenet::Server<DemoChannel>;
-type DemoClientVal = bevy_simplenet::ClientValFrom<DemoChannel>;
+type DemoServer      = bevy_simplenet::Server<DemoChannel>;
+type DemoServerEvent = bevy_simplenet::ServerEventFrom<DemoChannel>;
 
 fn server_factory() -> bevy_simplenet::ServerFactory<DemoChannel>
 {
@@ -59,62 +59,49 @@ fn send_new_button_state(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn update_client_connections(
+fn handle_server_events(
     mut rcommands : ReactCommands,
     server        : Res<DemoServer>,
     mut clients   : ResMut<ClientConnections>,
     mut state     : ResMut<ReactRes<ButtonState>>
 ){
-    while let Some(connection_report) = server.next_report()
-    {
-        match connection_report
-        {
-            bevy_simplenet::ServerReport::Connected(id, _, _) => { let _ = clients.0.insert(id); },
-            bevy_simplenet::ServerReport::Disconnected(id) =>
-            {
-                let _ = clients.0.remove(&id);
-
-                // clear the state if disconnected client held the button
-                if state.0 == Some(id) { *state.get_mut(&mut rcommands) = ButtonState::default(); }
-            },
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn handle_client_incoming(
-    mut rcommands : ReactCommands,
-    server        : Res<DemoServer>,
-    mut state     : ResMut<ReactRes<ButtonState>>
-){
     let mut new_button_state = state.0;
 
-    while let Some((client_id, client_val)) = server.next_val()
+    while let Some((client_id, server_event)) = server.next()
     {
-        match client_val
+        match server_event
         {
-            DemoClientVal::Msg(()) => continue,
-            DemoClientVal::Request(request, token) =>
+            DemoServerEvent::Report(connection_report) => match connection_report
             {
-                match request
+                bevy_simplenet::ServerReport::Connected(_, _) =>
                 {
-                    DemoClientRequest::Select =>
-                    {
-                        // acknowldge selection
-                        let _ = server.acknowledge(token);
+                    // add client
+                    let _ = clients.0.insert(client_id);
 
-                        // update button
-                        new_button_state = Some(client_id);
-                    }
-                    DemoClientRequest::GetState =>
-                    {
-                        // send current server state to client
-                        // - we must use new_button_state to ensure the order of events is preserved
-                        let current_state = new_button_state;
-                        let _ = server.respond(token, DemoServerResponse::Current(current_state));
-                    }
+                    // send current server state to client
+                    // - we must use new_button_state to ensure the order of events is preserved
+                    let current_state = new_button_state;
+                    let _ = server.send(client_id, DemoServerMsg::Current(current_state));
+                }
+                bevy_simplenet::ServerReport::Disconnected =>
+                {
+                    // remove client
+                    let _ = clients.0.remove(&client_id);
+
+                    // clear the state if disconnected client held the button
+                    if state.0 == Some(client_id) { *state.get_mut(&mut rcommands) = ButtonState::default(); }
+                }
+            }
+            DemoServerEvent::Msg(()) => continue,
+            DemoServerEvent::Request(request, token) => match request
+            {
+                DemoClientRequest::Select =>
+                {
+                    // acknowldge selection
+                    let _ = server.ack(token);
+
+                    // update button
+                    new_button_state = Some(client_id);
                 }
             }
         }
@@ -136,7 +123,7 @@ fn main()
     // prepare tracing
     // /*
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::WARN)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     // */
@@ -169,12 +156,7 @@ fn main()
     syscall(&mut app.world, (), setup);
 
     // run server
-    app.add_systems(Main,
-            (
-                update_client_connections, apply_deferred,
-                handle_client_incoming, apply_deferred,
-            ).chain()
-        )
+    app.add_systems(Main, handle_server_events)
         .run();
 }
 
