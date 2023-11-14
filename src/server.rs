@@ -128,7 +128,7 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.server_val_sender.send(
-                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Msg(msg)))
+                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Msg(msg), None))
             )
         {
             tracing::error!(?err, "failed to forward message to session");
@@ -160,9 +160,10 @@ impl<Channel: ChannelPack> Server<Channel>
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
+        let (request_id, death_signal) = token.take();
         if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Response(response, token.take()))
+                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Response(response, request_id), Some(death_signal))
             ))
         {
             tracing::error!(?err, "failed to forward response to session");
@@ -196,9 +197,10 @@ impl<Channel: ChannelPack> Server<Channel>
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
+        let (request_id, death_signal) = token.take();
         if let Err(err) = self.server_val_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Ack(token.take()))
+                SessionCommand::<Channel>::Send(ServerValFrom::<Channel>::Ack(request_id), Some(death_signal))
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");

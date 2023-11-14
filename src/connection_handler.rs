@@ -182,8 +182,17 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
         {
             //todo: consider marshalling the message into the session via Session::call() so the session's
             //      thread can do serializing instead of the connection handler which is a bottleneck
-            SessionCommand::<Channel>::Send(msg_to_send) =>
+            SessionCommand::<Channel>::Send(msg_to_send, maybe_death_signal) =>
             {
+                // check if the target session is still alive (for request/response patterns)
+                // - note that this check synchronizes with the session registry, guaranteeing our response can only be
+                //   sent to the request's originating session
+                if let Some(death_signal) = maybe_death_signal
+                {
+                    if death_signal.is_dead()
+                    { tracing::debug!("dropping response targeted at dead session"); return Ok(()); }
+                }
+
                 // pack the message
                 let packed_msg = ServerMetaFrom::<Channel>::Val(msg_to_send);
 

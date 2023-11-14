@@ -87,6 +87,20 @@ pub enum ServerReport<ConnectMsg: Debug + Clone>
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
+pub(crate) struct SessionDeathSignal
+{
+    death_signal: Arc<AtomicBool>
+}
+
+impl SessionDeathSignal
+{
+    pub(crate) fn new(death_signal: Arc<AtomicBool>) -> Self { Self{ death_signal } }
+    pub(crate) fn is_dead(&self) -> bool { self.death_signal.load(Ordering::Acquire) }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Represents a client request on the server.
 ///
 /// When dropped without using [`Server::respond()`] or [`Server::acknowledge()`], a [`ServerVal::Reject`] message will be
@@ -97,7 +111,7 @@ pub struct RequestToken
     client_id    : SessionID,
     request_id   : u64,
     rejector     : Option<Arc<dyn RequestRejectorFn>>,
-    death_signal : Arc<AtomicBool>,
+    death_signal : Option<SessionDeathSignal>,
 }
 
 impl RequestToken
@@ -110,7 +124,7 @@ impl RequestToken
         death_signal : Arc<AtomicBool>
     ) -> Self
     {
-        Self{ client_id, request_id, rejector: Some(rejector), death_signal }
+        Self{ client_id, request_id, rejector: Some(rejector), death_signal: Some(SessionDeathSignal::new(death_signal)) }
     }
 
     /// The id of the client that sent this request.
@@ -131,14 +145,15 @@ impl RequestToken
     /// old request tokens become invalid.
     pub fn destination_is_dead(&self) -> bool
     {
-        self.death_signal.load(Ordering::Relaxed)
+        self.death_signal.as_ref().unwrap().is_dead()
     }
 
     /// Consume the token, preventing it from sending a rejection message when dropped.
-    pub(crate) fn take(mut self) -> u64
+    pub(crate) fn take(mut self) -> (u64, SessionDeathSignal)
     {
         let _ = self.rejector.take();
-        self.request_id
+        let death_signal = self.death_signal.take().unwrap();
+        (self.request_id, death_signal)
     }
 }
 
@@ -171,6 +186,32 @@ pub enum ClientVal<ClientMsg, ClientRequest>
     /// A request to the server.
     ///
     /// The server should reply with a response, ack, or rejection.
+    ///
+    /// It is NOT recommended to use a request/response pattern for requests that are not immediately handled on the
+    /// server (i.e. not handled before pulling any new client values from the server API).
+    ///
+    /// Consider this sequence of server API accesses:
+    /// 1) Server receives request from client A. The request is not immediately handled.
+    /// 2) Server receives disconnect event for client A.
+    /// 3) Server receives connect event for client A.
+    /// 4) Server sends server-state sync message to client A to ensure the client's view of the server is correct.
+    /// 5) Server mutates itself while handling the request from step 1. Note that this step may be asynchronously
+    ///    distributed across the previous steps, which means we cannot simply check if the request token is dead before
+    ///    making any mutations (i.e. in order to synchronize with step 4).
+    /// 6) Server sends response to request from step 1, representing the updated server state.
+    ///
+    /// The client will *not* receive the response in step 5, because we discard all responses sent for pre-reconnect
+    /// requests. Doing so allows us to promptly notify clients that requests have failed when they disconnect,
+    /// which is important for client responsiveness. As a result, any mutations from
+    /// step 5 will not be visible to the client. If you use a client-message/server-message pattern then the server
+    /// message will not be discarded, at the cost of weaker message tracking in the client.
+    ///
+    /// **Caveat**: It is viable to combine a request/response pattern with a server-message fallback. In step 6 if
+    ///             the request token is dead, then you can send the response as a server message. If it is not dead and the
+    ///             response fails anyway (due to another disconnect), then we know that the client wouldn't have received
+    ///             the fallback message either. In that case, when the client reconnects (for the second time) they
+    ///             will receive a server-state sync message that will include the updated state from the prior request
+    ///             (which at that point would have been sent two full reconnect cycles ago).
     Request(ClientRequest, RequestToken),
 }
 
@@ -219,7 +260,11 @@ impl<I, T> SessionSourceMsg<I, T>
 pub(crate) enum SessionCommand<Channel: ChannelPack>
 {
     /// Send a server value.
-    Send(ServerValFrom<Channel>),
+    ///
+    /// Includes an optional 'death signal' for the target session of responses. We need this signal in order to
+    /// address a race condition between the server API and the server backend where a response for a request received
+    /// by an old session can be sent via a new session.
+    Send(ServerValFrom<Channel>, Option<SessionDeathSignal>),
     /// Close a session.
     Close(ezsockets::CloseFrame)
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0]
+
+### Fixed
+
+- Race condition that would allow a server to send a response to a request from a dead session to a new session.
+
+
 ## [0.3.2]
 
 ### Fixed

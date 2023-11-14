@@ -37,11 +37,8 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
     /// tracks the lowest-encountered request id in order to help clients synchronize after reconnecting
     pub(crate) earliest_request_id: Option<u64>,
 
-    /// Signal used to inform request tokens of the session's death, to avoid spuriously sending responses to new sessions
-    /// for requests made before a reconnect. Note that it is technically possible for a buffered response to be sent
-    /// to a client by a new session before a sync point is established, however old responses can never be sent after a
-    /// sync point, which ensures a client will never
-    /// receive a response after their request's status becomes [`RequestStatus::ResponseLost`].
+    /// Signal used to inform request tokens of the session's death, to avoid sending responses to new sessions
+    /// for requests made with old sessions.
     pub(crate) death_signal: Arc<AtomicBool>,
 }
 
@@ -232,7 +229,7 @@ impl<Channel: ChannelPack> Drop for SessionHandler<Channel>
 {
     fn drop(&mut self)
     {
-        self.death_signal.store(true, Ordering::Relaxed);
+        self.death_signal.store(true, Ordering::Release);
     }
 }
 
