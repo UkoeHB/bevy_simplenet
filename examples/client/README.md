@@ -8,7 +8,7 @@ To address this, we use client prediction. When you click a button, it is select
 
 If a client-side predicted input fails to send or receive a response, we need to roll back all predicted effects and apply the latest server-authoritative state. This means always tracking the current server state.
 
-If there is a reconnect sequence, it is possible that server messages were lost, leaving it unclear what state the server is in. After a reconnect, we always request the current world state to repair the tracked server state. If there are any pending predicted client inputs, we apply them on top of the repaired state.
+If there is a reconnect sequence, it is possible that server messages were lost, leaving it unclear what state the server is in. After a reconnect, the server sends its current world state to the client so it can re-synchronize its local view of the server.
 
 
 ### Native client

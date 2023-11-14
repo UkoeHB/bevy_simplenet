@@ -2,6 +2,10 @@
 
 ## [0.4.0]
 
+### Changed
+
+- Major refactor to client/server API. Connection reports are now emitted alongside other client/server events. In particular, `ClientReport::Connected` and `ServerReport::Connected` synchronize with old requests failing, which means clients no longer need to manually synchronize with the server. Instead, the server can simply send its current state to the client as soon as it encounters a `ServerReport::Connected`.
+
 ### Fixed
 
 - Race condition that would allow a server to send a response to a request from a dead session to a new session.
