@@ -89,7 +89,7 @@ fn handle_server_events(
                     let _ = clients.0.remove(&client_id);
 
                     // clear the state if disconnected client held the button
-                    if state.0 == Some(client_id) { *state.get_mut(&mut rcommands) = ButtonState::default(); }
+                    if state.0 == Some(client_id) { new_button_state = None; }
                 }
             }
             DemoServerEvent::Msg(()) => continue,
