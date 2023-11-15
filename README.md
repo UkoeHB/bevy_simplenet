@@ -137,10 +137,8 @@ assert_eq!(server.num_connections(), 1u64);
 let (
         client_id,
         TestServerEvent::Report(ServerReport::Connected(env_type, connect_msg))
-    ) = server.next().unwrap()
-else { todo!(); };
-let TestClientEvent::Report(ClientReport::Connected) = client.next().unwrap()
-else { todo!(); };
+    ) = server.next().unwrap() else { todo!(); };
+let TestClientEvent::Report(ClientReport::Connected) = client.next().unwrap() else { todo!(); };
 assert_eq!(env_type, EnvType::Native);
 assert_eq!(connect_msg.0, String::from("hello"));
 
@@ -156,8 +154,7 @@ assert_eq!(signal.status(), MessageStatus::Sent);
 let (
         msg_client_id,
         TestServerEvent::Msg(TestClientMsg(msg_val))
-    ) = server.next().unwrap()
-else { todo!() };
+    ) = server.next().unwrap() else { todo!() };
 assert_eq!(msg_client_id, client_id);
 assert_eq!(msg_val, 42);
 
@@ -168,8 +165,7 @@ sleep(sleep_duration);
 
 
 // read message from server
-let TestClientEvent::Msg(TestServerMsg(msg_server_val)) = client.next().unwrap()
-else { todo!() };
+let TestClientEvent::Msg(TestServerMsg(msg_server_val)) = client.next().unwrap() else { todo!() };
 assert_eq!(msg_server_val, 24);
 
 
@@ -181,8 +177,7 @@ assert_eq!(signal.status(), RequestStatus::Waiting);
 
 
 // read request from client
-let (_, TestServerEvent::Request((), request_token)) = server.next().unwrap()
-else { todo!() };
+let (_, TestServerEvent::Request((), request_token)) = server.next().unwrap() else { todo!() };
 
 
 // acknowledge the request (consumes the token without sending a Response)
@@ -192,8 +187,7 @@ assert_eq!(signal.status(), RequestStatus::Acknowledged);
 
 
 // read acknowledgement from server
-let TestClientEvent::Ack(request_id) = client.next().unwrap()
-else { todo!() };
+let TestClientEvent::Ack(request_id) = client.next().unwrap() else { todo!() };
 assert_eq!(request_id, signal.id());
 
 
@@ -204,12 +198,9 @@ assert_eq!(server.num_connections(), 0u64);
 
 
 // read disconnection messages
-let (_, TestServerEvent::Report(ServerReport::Disconnected)) = server.next().unwrap()
-else { todo!() };
-let TestClientEvent::Report(ClientReport::ClosedBySelf) = client.next().unwrap()
-else { todo!() };
-let TestClientEvent::Report(ClientReport::IsDead(_)) = client.next().unwrap()
-else { todo!() };
+let (_, TestServerEvent::Report(ServerReport::Disconnected)) = server.next().unwrap() else { todo!() };
+let TestClientEvent::Report(ClientReport::ClosedBySelf) = client.next().unwrap() else { todo!() };
+let TestClientEvent::Report(ClientReport::IsDead(_)) = client.next().unwrap() else { todo!() };
 ```
 
 
