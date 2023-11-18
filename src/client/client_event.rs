@@ -15,7 +15,7 @@ pub enum ClientReport
     /// The client connected to the server.
     ///
     /// This event synchronizes with the request/response pattern. All requests sent before the client became connected
-    /// will receive a result event (Response/Ack/Reject/SendFailed/ResponseLost) before this event is emitted.
+    /// will receive a result event (Response/Ack/Reject/SendFailed/ResponseLost) before `Connected` is emitted.
     Connected,
     /// The client disconnected from the server.
     Disconnected,
