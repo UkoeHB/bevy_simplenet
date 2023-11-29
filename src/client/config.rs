@@ -8,7 +8,7 @@ use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Config for the [`Client`].
+/// Config for the [`Client`](crate::Client).
 #[derive(Debug)]
 pub struct ClientConfig
 {

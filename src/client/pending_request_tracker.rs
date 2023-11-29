@@ -50,7 +50,7 @@ impl PendingRequestTracker
     /// and drain them.
     pub(crate) fn drain_failed_requests(&mut self) -> impl Iterator<Item = RequestSignal> + '_
     {
-        self.pending_requests.drain_filter(
+        self.pending_requests.extract_if(
                 move |_, signal| -> bool
                 {
                     if signal.status() == RequestStatus::Sending { return false; }
@@ -63,7 +63,7 @@ impl PendingRequestTracker
     /// Abort and drain all pending requests.
     pub(crate) fn abort_all(&mut self) -> impl Iterator<Item = RequestSignal> + '_
     {
-        self.pending_requests.drain_filter(
+        self.pending_requests.extract_if(
                 move |_, signal| -> bool
                 {
                     signal.inner().set(RequestStatus::ResponseLost);

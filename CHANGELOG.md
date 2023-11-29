@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1]
+
+### Fixed
+
+- Update: `hash_drain_filter` -> `hash_extract_if` nightly feature. This should fix docs.rs not compiling.
+
+
 ## [0.5.0]
 
 ### Changed
