@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2]
+
+### Changed
+
+- Updated examples to bevy v0.12.
+
+
 ## [0.5.1]
 
 ### Fixed
