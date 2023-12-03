@@ -4,7 +4,7 @@ use bevy_simplenet_common::*;
 //third-party shortcuts
 use bevy::app::*;
 use bevy::prelude::*;
-use bevy_kot::ecs::*;
+use bevy_kot::prelude::*;
 
 //standard shortcuts
 use std::collections::HashSet;
@@ -29,7 +29,7 @@ struct ClientConnections(HashSet<u128>);
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Resource, Default)]
+#[derive(ReactResource, Default)]
 struct ButtonState(Option<u128>);
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -37,9 +37,7 @@ struct ButtonState(Option<u128>);
 
 fn setup(mut react_commands: ReactCommands)
 {
-    let _ = react_commands.on_resource_mutation::<ReactRes<ButtonState>>(
-            move |world| { syscall(world, (), send_new_button_state); }
-        );
+    let _ = react_commands.on(resource_mutation::<ButtonState>(), send_new_button_state);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -48,7 +46,7 @@ fn setup(mut react_commands: ReactCommands)
 fn send_new_button_state(
     server  : Res<DemoServer>,
     clients : Res<ClientConnections>,
-    state   : Res<ReactRes<ButtonState>>,
+    state   : ReactRes<ButtonState>,
 ){
     for client_id in clients.0.iter()
     {
@@ -63,7 +61,7 @@ fn handle_server_events(
     mut rcommands : ReactCommands,
     server        : Res<DemoServer>,
     mut clients   : ResMut<ClientConnections>,
-    mut state     : ResMut<ReactRes<ButtonState>>
+    mut state     : ReactResMut<ButtonState>,
 ){
     let mut new_button_state = state.0;
 
@@ -150,7 +148,7 @@ fn main()
         .init_schedule(Main)
         .insert_resource(server)
         .init_resource::<ClientConnections>()
-        .insert_resource(ReactRes::new(ButtonState::default()));
+        .insert_react_resource(ButtonState::default());
 
     // setup
     syscall(&mut app.world, (), setup);

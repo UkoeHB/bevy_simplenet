@@ -3,9 +3,9 @@ use bevy_simplenet_common::*;
 
 //third-party shortcuts
 use bevy::prelude::*;
-use bevy::window::WindowTheme;
+use bevy::window::{PrimaryWindow, WindowTheme};
 use bevy::winit::{UpdateMode, WinitSettings};
-use bevy_kot::prelude::{*, builtin::*};
+use bevy_kot::prelude::*;
 use bevy_lunex::prelude::*;
 
 //standard shortcuts
@@ -204,7 +204,7 @@ fn set_new_server_state(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn connection_status_section(ui: &mut UiBuilder<MainUI>, area: Widget)
+fn connection_status_section(ui: &mut UiBuilder<MainUi>, area: Widget)
 {
     // text layout helper
     let layout_helper = Widget::create(
@@ -249,7 +249,7 @@ fn connection_status_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn button_owner_section(ui: &mut UiBuilder<MainUI>, area: Widget)
+fn button_owner_section(ui: &mut UiBuilder<MainUi>, area: Widget)
 {
     // text layout helper (extend y-axis to avoid resizing issues)
     let layout_helper = relative_widget(ui.tree(), area.end(""), (0., 100.), (0., 200.));
@@ -277,7 +277,7 @@ fn button_owner_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn button_section(ui: &mut UiBuilder<MainUI>, area: Widget)
+fn button_section(ui: &mut UiBuilder<MainUi>, area: Widget)
 {
     // default button image tied to button
     let default_widget = make_overlay(ui.tree(), &area, "default", true);
@@ -306,16 +306,16 @@ fn button_section(ui: &mut UiBuilder<MainUI>, area: Widget)
     ui.commands().spawn(image);
 
     // button interactivity
-    let mut entity_commands = ui.commands().spawn_empty();
-    InteractiveElementBuilder::new()
+    let entity = InteractiveElementBuilder::new()
         .with_default_widget(default_widget)
         .with_selected_widget(selected_widget)
         .select_on_click()
-        .select_callback(|world| syscall(world, (), handle_button_select))
-        .deselect_callback(|world| syscall(world, (), handle_button_deselect))
-        .build::<MouseLButtonMain>(&mut entity_commands, area)
+        .on_select(handle_button_select)
+        .on_deselect(handle_button_deselect)
+        .spawn_with::<MouseLButtonMain>(ui, area)
         .unwrap();
-    entity_commands.insert(UIInteractionBarrier::<MainUI>::default());
+    let mut entity_commands = ui.commands().entity(entity);
+    entity_commands.insert(UiInteractionBarrier::<MainUi>::default());
 
     // cached select signal and server state tracking
     entity_commands.insert(
@@ -329,7 +329,7 @@ fn button_section(ui: &mut UiBuilder<MainUI>, area: Widget)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn build_ui(mut ui: UiBuilder<MainUI>)
+fn build_ui(mut ui: UiBuilder<MainUi>)
 {
     // root widget
     let root = relative_widget(ui.tree(), "root", (0., 100.), (0., 100.));
@@ -350,7 +350,7 @@ fn build_ui(mut ui: UiBuilder<MainUI>)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn setup(mut commands: Commands)
+fn setup(mut commands: Commands, window: Query<Entity, (With<Window>, With<PrimaryWindow>)>)
 {
     // prepare 2D camera
     commands.spawn(
@@ -358,11 +358,14 @@ fn setup(mut commands: Commands)
         );
 
     // make lunex cursor
-    commands.spawn((Cursor::new(0.0), Transform::default(), MainMouseCursor));
+    commands.spawn((Cursor::new(), Transform::default(), Visibility::default(), MainMouseCursor));
 
     // prepare lunex ui tree
-    commands.insert_resource(StyleStackRes::<MainUI>::default());
-    commands.spawn((UiTree::new("ui"), MainUI));
+    commands.insert_resource(StyleStackRes::<MainUi>::default());
+    let tree = UiTree::<MainUi>::new("ui");
+
+    let window = window.single();
+    commands.entity(window).insert(tree.bundle());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -480,11 +483,12 @@ fn main()
     App::new()
         .add_plugins(bevy_plugins)
         .insert_resource(WinitSettings{
-            focused_mode   : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
-            unfocused_mode : UpdateMode::Reactive{ max_wait: std::time::Duration::from_millis(100) },
+            focused_mode   : UpdateMode::Reactive{ wait: std::time::Duration::from_millis(100) },
+            unfocused_mode : UpdateMode::Reactive{ wait: std::time::Duration::from_millis(100) },
             ..Default::default()
         })
-        .add_plugins(LunexUiPlugin)
+        .add_plugins(ReactPlugin)
+        .add_plugins(LunexUiPlugin2D::<MainUi>::new())
         .register_interaction_source(MouseLButtonMain::default())
         .insert_resource(client)
         .insert_resource(ConnectionStatus::Connecting)
