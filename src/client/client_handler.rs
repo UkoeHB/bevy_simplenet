@@ -370,6 +370,8 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
 {
     fn drop(&mut self)
     {
+        tracing::info!("dropping client");
+
         // lock the pending requests cache
         let Ok(mut pending_requests) = self.pending_requests.lock() else { return; };
 
