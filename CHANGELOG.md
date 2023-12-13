@@ -1,5 +1,12 @@
 # Changelog
 
+## WIP
+
+### Added
+
+- More tracing.
+
+
 ## [0.5.2]
 
 ### Changed

@@ -8,7 +8,7 @@ Provides a bi-directional server/client channel implemented over websockets. Thi
 - Clients can be authenticated by the server (WIP).
 - Provides optional server TLS.
 
-Check out the example for a demonstration of how to build a Bevy client using this crate. **NOTE**: the example is broken on master while I am waiting for dependencies to update to bevy v0.12. It works in v0.4.0 (or just revert the bevy version of master to v0.11).
+Check out the example for a demonstration of how to build a Bevy client using this crate.
 
 This crate requires nightly rust.
 
