@@ -2,6 +2,13 @@
 
 ## WIP
 
+
+## [0.5.3]
+
+### Changed
+
+- Update nightly dependency.
+
 ### Added
 
 - More tracing.
