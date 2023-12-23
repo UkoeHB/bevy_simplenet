@@ -46,7 +46,7 @@ async-trait     = { version = "0.1" }
 bincode         = { version = "1.3" }
 cfg-if          = { version = "1.0" }
 crossbeam       = { version = "0.8" }
-enfync          = { version = "0.1" }
+enfync          = { version = "0.2" }
 form_urlencoded = { version = "1.2" }
 serde           = { version = "1.0" }
 serde_json      = { version = "1.0" }
@@ -63,16 +63,22 @@ tokio       = { version = "1.29", optional = true }
 wasm-timer = { version = "0.2" }
 
 [dependencies.ezsockets]
-version          = "0.6"
+#version          = "0.6"
+git = "https://github.com/gbaranski/ezsockets"
+rev = "f92e434"
 default-features = false
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
-version          = "0.6"
+#version          = "0.6"
+git = "https://github.com/gbaranski/ezsockets"
+rev = "f92e434"
 default-features = false
 features         = [ "native_client" ]  #todo: how to configure target on 'client' feature?
 
 [target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
-version          = "0.6"
+#version          = "0.6"
+git = "https://github.com/gbaranski/ezsockets"
+rev = "f92e434"
 default-features = false
 features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature?
 

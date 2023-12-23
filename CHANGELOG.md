@@ -1,6 +1,10 @@
 # Changelog
 
-## WIP
+## [0.5.4]
+
+### Changed
+
+- Update dependencies.
 
 
 ## [0.5.3]

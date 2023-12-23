@@ -9,6 +9,6 @@ bevy_kot              = { version = "0.9.0" }
 bevy_kot_ecs          = { version = "0.9.0" }
 bevy_simplenet        = { path = "../../", default_features = false, features = [ "server", "bevy" ] }
 bevy_simplenet-common = { path = "../common/" }
-enfync                = { version = "0.1" }
+enfync                = { version = "0.2" }
 tracing               = { version = "0.1" }
 tracing-subscriber    = { version = "0.3" }
