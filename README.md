@@ -10,6 +10,8 @@ Provides a bi-directional server/client channel implemented over websockets. Thi
 
 Check out the example for a demonstration of how to build a Bevy client using this crate.
 
+Check out [bevy_simplenet_events](https://github.com/UkoeHB/bevy_simplenet_events) for an event-based framework for networking that builds on this crate.
+
 This crate requires nightly rust.
 
 
@@ -17,7 +19,7 @@ This crate requires nightly rust.
 ## Features
 
 - `default`: includes `bevy`, `client`, `server` features
-- `bevy`: derives `Resource` on [`Client`] and [`Server`]
+- `bevy`: derives `Resource` on [`Client`](bevy_simplenet::Client) and [`Server`](bevy_simplenet::Server)
 - `client`: enables clients (native and WASM targets)
 - `server`: enables servers (native-only targets)
 - `tls-rustls`: enables TLS for servers via [`rustls`](https://crates.io/crates/rustls)
@@ -34,10 +36,10 @@ On WASM targets the client backend will not update while any other tasks are run
 ## Usage notes
 
 - Servers and clients must be created with [enfync](https://crates.io/crates/enfync) runtimes. The backend is [ezsockets](https://github.com/gbaranski/ezsockets).
-- A client's [`AuthRequest`] type must match the corresponding server's [`Authenticator`] type.
-- Client ids are defined by clients via their [`AuthRequest`] when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
+- A client's [`AuthRequest`](bevy_simplenet::AuthRequest) type must match the corresponding server's [`Authenticator`](bevy_simplenet::Authenticator) type.
+- Client ids are defined by clients via their [`AuthRequest`](bevy_simplenet::AuthRequest) when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
 - Client connect messages will be cloned for all reconnect attempts, so they should be treated as static data.
-- Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`] and [`Client::request()`] to track the status of a message. Client request results will always be emitted by [`Client::next()`]. Message tracking is not available for servers.
+- Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`](bevy_simplenet::Client::send) and [`Client::request()`](bevy_simplenet::Client::request) to track the status of a message. Client request results will always be emitted by [`Client::next()`](bevy_simplenet::Client::next). Message tracking is not available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.
 
 
@@ -207,6 +209,7 @@ let TestClientEvent::Report(ClientReport::IsDead(_)) = client.next().unwrap() el
 
 ## TODOs
 
+- Fix race condition that allows sending a client or server message to a new session before the old session's `Disconnected` event has been processed.
 - Fix linker errors when the `bevy/dynamic_linking` feature is enabled.
 - Implement `AuthToken` for client/server authentication.
 - Add server shut down procedure.

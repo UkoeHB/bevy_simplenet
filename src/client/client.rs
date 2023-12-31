@@ -46,7 +46,7 @@ pub struct Client<Channel: ChannelPack>
 
 impl<Channel: ChannelPack> Client<Channel>
 {
-    /// Send a one-shot message to the server.
+    /// Sends a one-shot message to the server.
     ///
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
@@ -72,7 +72,7 @@ impl<Channel: ChannelPack> Client<Channel>
         }
     }
 
-    /// Send a request to the server.
+    /// Sends a request to the server.
     ///
     /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Requests
     /// will fail if the underlying client becomes disconnected.
@@ -112,7 +112,7 @@ impl<Channel: ChannelPack> Client<Channel>
         }
     }
 
-    /// Try to get the next client event.
+    /// Tries to get the next client event.
     ///
     /// When the client dies, the last event emitted will be `ClientEvent::Report(ClientReport::IsDead))`.
     pub fn next(&self) -> Option<ClientEventFrom<Channel>>
@@ -127,7 +127,7 @@ impl<Channel: ChannelPack> Client<Channel>
         self.client_id
     }
 
-    /// Test if the client is connected.
+    /// Tests if the client is connected.
     ///
     /// Messages and requests cannot be submitted when the client is not connected.
     pub fn is_connected(&self) -> bool
@@ -135,7 +135,7 @@ impl<Channel: ChannelPack> Client<Channel>
         self.client_connected_signal.load(Ordering::Acquire) && !self.is_closed()
     }
 
-    /// Test if the client is dead (no longer connected to the server and won't reconnect).
+    /// Tests if the client is dead (no longer connected to the server and won't reconnect).
     /// - Note that [`ClientReport::IsDead`] will be emitted by [`Client::next()`] when the client backend dies.
     ///
     /// Once this returns true you can drain the client by calling [`Client::next()`] until no more values appear.
@@ -145,7 +145,7 @@ impl<Channel: ChannelPack> Client<Channel>
         self.client_closed_signal.load(Ordering::Acquire)
     }
 
-    /// Test if the client is closed.
+    /// Tests if the client is closed.
     ///
     /// Returns true after [`Client::close()`] has been called, or once the internal client dies.
     ///
@@ -155,7 +155,7 @@ impl<Channel: ChannelPack> Client<Channel>
         self.closed_by_self.load(Ordering::Acquire) || self.is_dead()
     }
 
-    /// Close the client.
+    /// Closes the client.
     ///
     /// Any in-progress messages may or may not fail once this method is called. New messages and requests cannot be
     /// sent after this method is called.
@@ -214,13 +214,13 @@ pub struct ClientFactory<Channel: ChannelPack>
 
 impl<Channel: ChannelPack> ClientFactory<Channel>
 {
-    /// Make a new server factory with a given protocol version.
+    /// Makes a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
     {
         ClientFactory{ protocol_version, _phantom: PhantomData::default() }
     }
 
-    /// New client.
+    /// Makes a new client.
     pub fn new_client(&self,
         runtime_handle : enfync::builtin::Handle,
         url            : url::Url,

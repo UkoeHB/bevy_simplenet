@@ -117,7 +117,7 @@ pub struct Server<Channel: ChannelPack>
 
 impl<Channel: ChannelPack> Server<Channel>
 {
-    /// Send a message to the target session.
+    /// Sends a message to the target session.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
     pub fn send(&self, id: SessionID, msg: Channel::ServerMsg) -> Result<(), ()>
@@ -136,7 +136,7 @@ impl<Channel: ChannelPack> Server<Channel>
         Ok(())
     }
 
-    /// Respond to a client request.
+    /// Responds to a client request.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
     pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse) -> Result<(), ()>
@@ -174,7 +174,7 @@ impl<Channel: ChannelPack> Server<Channel>
         Ok(())
     }
 
-    /// Acknowledge a client request.
+    /// Acknowledges a client request.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
     ///
@@ -211,13 +211,13 @@ impl<Channel: ChannelPack> Server<Channel>
         Ok(())
     }
 
-    /// Reject a client request.
+    /// Rejects a client request.
     pub fn reject(&self, _token: RequestToken)
     {
         // drop the token: rejection will happen automatically using the token's custom Drop
     }
 
-    /// Close the target session.
+    /// Closes the target session.
     ///
     /// The target session may remain open until some time after this method is called.
     pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
@@ -240,26 +240,26 @@ impl<Channel: ChannelPack> Server<Channel>
         Ok(())
     }
 
-    /// Get the next available server event
+    /// Gets the next available server event
     pub fn next(&self) -> Option<(SessionID, ServerEventFrom<Channel>)>
     {
         let Ok(msg) = self.server_event_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
     }
 
-    /// Get the server's url.
+    /// Gets the server's url.
     pub fn url(&self) -> url::Url
     {
         make_websocket_url(self.uses_tls, self.server_address).unwrap()
     }
 
-    /// Get the number of client connections.
+    /// Gets the number of client connections.
     pub fn num_connections(&self) -> u64
     {
         self.connection_counter.load()
     }
 
-    /// Test if the server is dead.
+    /// Tests if the server is dead.
     pub fn is_dead(&self) -> bool
     {
         self.server_closed_signal.done() || self.server_running_signal.done()
@@ -279,13 +279,13 @@ pub struct ServerFactory<Channel: ChannelPack>
 
 impl<Channel: ChannelPack> ServerFactory<Channel>
 {
-    /// Make a new server factory with a given protocol version.
+    /// Makes a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
     {
         ServerFactory{ protocol_version, _phantom: PhantomData::default() }
     }
 
-    /// Make a new server.
+    /// Makes a new server.
     ///
     /// Only works with a tokio runtime handle.
     pub fn new_server<A>(&self,
