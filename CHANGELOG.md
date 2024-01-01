@@ -9,12 +9,6 @@
 ### Changed
 
 - Updated `Server::close_session()` to take an optional close frame.
-
-
-## [0.5.4]
-
-### Changed
-
 - Update dependencies.
 
 
