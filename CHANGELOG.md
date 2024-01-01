@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0]
+
+### Added
+
+- Re-export `ezsockets::CloseFrame`.
+
+### Changed
+
+- Updated `Server::close_session()` to take an optional close frame.
+
+
 ## [0.5.4]
 
 ### Changed

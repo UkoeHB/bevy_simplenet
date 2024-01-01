@@ -49,7 +49,7 @@ pub(crate) enum SessionCommand<Channel: ChannelPack>
     /// by an old session could be sent via a new session.
     Send(ClientMetaEventFrom<Channel>, Option<SessionDeathSignal>),
     /// Close a session.
-    Close(ezsockets::CloseFrame)
+    Close(Option<ezsockets::CloseFrame>)
 }
 
 //-------------------------------------------------------------------------------------------------------------------

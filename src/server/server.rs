@@ -220,7 +220,7 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Closes the target session.
     ///
     /// The target session may remain open until some time after this method is called.
-    pub fn close_session(&self, id: SessionID, close_frame: ezsockets::CloseFrame) -> Result<(), ()>
+    pub fn close_session(&self, id: SessionID, close_frame: Option<ezsockets::CloseFrame>) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         tracing::info!(id, "closing client");

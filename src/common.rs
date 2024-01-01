@@ -14,6 +14,10 @@ pub type SessionID = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+pub type CloseFrame = ezsockets::CloseFrame;
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Represents the message types that can be sent between a client and server.
 pub trait ChannelPack: Clone + Debug + 'static
 {

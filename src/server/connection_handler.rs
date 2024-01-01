@@ -204,7 +204,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 // command the target session to close
                 // - this may fail if the session is disconnected
                 tracing::info!(session_msg.id, "closing session");
-                if let Err(_) = session.close(Some(close_frame))
+                if let Err(_) = session.close(close_frame)
                 { tracing::debug!(session_msg.id, "failed closing session"); }
             }
         }
