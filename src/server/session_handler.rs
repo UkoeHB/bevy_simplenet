@@ -16,12 +16,12 @@ use std::vec::Vec;
 pub(crate) struct SessionHandler<Channel: ChannelPack>
 {
     /// id of this session
-    pub(crate) id: SessionID,
+    pub(crate) id: SessionId,
     /// this session
-    pub(crate) session: ezsockets::Session<SessionID, ()>,
+    pub(crate) session: ezsockets::Session<SessionId, ()>,
     /// sender for forwarding messages from the session's client to the server
     pub(crate) server_event_sender: crossbeam::channel::Sender<
-        SessionSourceMsg<SessionID, ServerEventFrom<Channel>>
+        SessionSourceMsg<SessionId, ServerEventFrom<Channel>>
     >,
 
     /// config: maximum message size (bytes)
@@ -43,10 +43,10 @@ pub(crate) struct SessionHandler<Channel: ChannelPack>
 #[async_trait::async_trait]
 impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 {
-    type ID   = SessionID;
+    type ID   = SessionId;
     type Call = ();
 
-    fn id(&self) -> &SessionID
+    fn id(&self) -> &SessionId
     {
         &self.id
     }
@@ -153,7 +153,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 
                 // try to forward client request to session owner
                 if let Err(err) = self.server_event_sender.send(
-                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Request(request, token))
+                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Request(token, request))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");

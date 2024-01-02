@@ -63,7 +63,7 @@ pub enum ServerEvent<ConnectMsg: Debug + Clone, ClientMsg: Debug, ClientRequest:
     ///             the fallback message either. In that case, when the client reconnects (for the second time) they
     ///             will receive a server-state sync message that will include the updated state from the prior request
     ///             (which at that point would have been sent two full reconnect cycles ago).
-    Request(ClientRequest, RequestToken),
+    Request(RequestToken, ClientRequest),
 }
 
 //-------------------------------------------------------------------------------------------------------------------

@@ -14,8 +14,8 @@ use std::collections::HashMap;
 //-------------------------------------------------------------------------------------------------------------------
 
 fn reject_client_request<Channel: ChannelPack>(
-    session    : &ezsockets::Session<SessionID, ()>,
-    session_id : SessionID,
+    session    : &ezsockets::Session<SessionId, ()>,
+    session_id : SessionId,
     request_id : u64
 ){
     // pack the message
@@ -45,18 +45,18 @@ pub(crate) struct ConnectionHandler<Channel: ChannelPack>
     pub(crate) connection_counter: ConnectionCounter,
 
     /// registered sessions
-    pub(crate) session_registry: HashMap<SessionID, ezsockets::Session<SessionID, ()>>,
+    pub(crate) session_registry: HashMap<SessionId, ezsockets::Session<SessionId, ()>>,
 
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
-    pub(crate) server_event_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>,
+    pub(crate) server_event_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>,
 }
 
 #[async_trait::async_trait]
 impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 {
     type Session = SessionHandler<Channel>;  //Self::Session, not ezsockets::Session
-    type Call    = SessionTargetMsg<SessionID, SessionCommand<Channel>>;
+    type Call    = SessionTargetMsg<SessionId, SessionCommand<Channel>>;
 
     /// Produces server sessions for new connections.
     async fn on_connect(
@@ -64,7 +64,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
         socket   : ezsockets::Socket,
         request  : ezsockets::Request,
         _address : std::net::SocketAddr,
-    ) -> Result<ezsockets::Session<SessionID, ()>, Option<ezsockets::CloseFrame>>
+    ) -> Result<ezsockets::Session<SessionId, ()>, Option<ezsockets::CloseFrame>>
     {
         // reject connection if max connections reached
         if self.session_registry.len() >= self.config.max_connections as usize
@@ -137,7 +137,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     /// Responds to session disconnects.
     async fn on_disconnect(
         &mut self,
-        id      : SessionID,
+        id      : SessionId,
         _reason : Result<Option<ezsockets::CloseFrame>, ezsockets::Error>
     ) -> Result<(), ezsockets::Error>
     {
@@ -162,7 +162,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     /// Responds to calls to the server connected to this handler (i.e. ezsockets::Server::call()).
     async fn on_call(
         &mut self,
-        session_msg: SessionTargetMsg<SessionID, SessionCommand<Channel>>
+        session_msg: SessionTargetMsg<SessionId, SessionCommand<Channel>>
     ) -> Result<(), ezsockets::Error>
     {
         // try to get targeted session (ignore if missing)

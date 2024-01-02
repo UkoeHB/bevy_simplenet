@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0]
+
+### Changed
+
+- Rename: `SessionID` -> `SessionId`.
+- Adjust: rearrange token before request in `ServerEvent`.
+
+
 ## [0.6.0]
 
 ### Added

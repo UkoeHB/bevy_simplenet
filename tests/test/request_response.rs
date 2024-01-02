@@ -103,7 +103,7 @@ fn request_response()
 
     let Some((
             msg_client_id,
-            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+            DemoServerEvent::Request(token, DemoClientRequest(msg_client_val))
         )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
@@ -192,7 +192,7 @@ fn request_ack()
 
     let Some((
             msg_client_id,
-            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+            DemoServerEvent::Request(token, DemoClientRequest(msg_client_val))
         )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
@@ -279,7 +279,7 @@ fn request_rejected()
 
     let Some((
             msg_client_id,
-            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+            DemoServerEvent::Request(token, DemoClientRequest(msg_client_val))
         )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);
@@ -370,7 +370,7 @@ fn request_dropped()
 
     let Some((
             msg_client_id,
-            DemoServerEvent::Request(DemoClientRequest(msg_client_val), token)
+            DemoServerEvent::Request(token, DemoClientRequest(msg_client_val))
         )) = websocket_server.next()
     else { panic!("server did not receive client msg"); };
     assert_eq!(client_id, msg_client_id);

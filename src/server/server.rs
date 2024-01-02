@@ -104,10 +104,10 @@ pub struct Server<Channel: ChannelPack>
 
     /// Sends client events to the internal connection handler.
     client_event_sender: tokio::sync::mpsc::UnboundedSender<
-        SessionTargetMsg<SessionID, SessionCommand<Channel>>
+        SessionTargetMsg<SessionId, SessionCommand<Channel>>
     >,
     /// Receives server events from the internal connection handler.
-    server_event_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>,
+    server_event_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>,
 
     /// A signal that indicates if the server's internal worker has stopped.
     server_closed_signal: enfync::PendingResult<()>,
@@ -120,7 +120,7 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Sends a message to the target session.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
     /// - Returns `Err` if an internal server error occurs.
-    pub fn send(&self, id: SessionID, msg: Channel::ServerMsg) -> Result<(), ()>
+    pub fn send(&self, id: SessionId, msg: Channel::ServerMsg) -> Result<(), ()>
     {
         if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return Err(()); }
 
@@ -220,7 +220,7 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Closes the target session.
     ///
     /// The target session may remain open until some time after this method is called.
-    pub fn close_session(&self, id: SessionID, close_frame: Option<ezsockets::CloseFrame>) -> Result<(), ()>
+    pub fn close_session(&self, id: SessionId, close_frame: Option<ezsockets::CloseFrame>) -> Result<(), ()>
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         tracing::info!(id, "closing client");
@@ -241,7 +241,7 @@ impl<Channel: ChannelPack> Server<Channel>
     }
 
     /// Gets the next available server event
-    pub fn next(&self) -> Option<(SessionID, ServerEventFrom<Channel>)>
+    pub fn next(&self) -> Option<(SessionId, ServerEventFrom<Channel>)>
     {
         let Ok(msg) = self.server_event_receiver.try_recv() else { return None; };
         Some((msg.id, msg.msg))
@@ -302,7 +302,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
         let (
                 server_event_sender,
                 server_event_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionID, ServerEventFrom<Channel>>>();
+            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>();
 
         // prepare connection counter
         // - this is used to communication the current number of connections from the connection handler to the

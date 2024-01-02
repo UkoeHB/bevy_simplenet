@@ -91,7 +91,7 @@ fn handle_server_events(
                 }
             }
             DemoServerEvent::Msg(()) => continue,
-            DemoServerEvent::Request(request, token) => match request
+            DemoServerEvent::Request(token, request) => match request
             {
                 DemoClientRequest::Select =>
                 {

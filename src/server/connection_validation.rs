@@ -274,7 +274,7 @@ pub(crate) struct ConnectionInfo<ConnectMsg>
 /// Assumes the request has already been pre-validated.
 pub(crate) fn extract_connection_info<ConnectMsg>(
     request          : &ezsockets::Request,
-    session_registry : &HashMap<SessionID, ezsockets::Session<SessionID, ()>>,
+    session_registry : &HashMap<SessionId, ezsockets::Session<SessionId, ()>>,
 ) -> Result<ConnectionInfo<ConnectMsg>, Option<ezsockets::CloseFrame>>
 where
     ConnectMsg: for<'de> Deserialize<'de> + 'static,

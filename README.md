@@ -179,7 +179,7 @@ assert_eq!(signal.status(), RequestStatus::Waiting);
 
 
 // read request from client
-let (_, TestServerEvent::Request((), request_token)) = server.next().unwrap() else { todo!() };
+let (_, TestServerEvent::Request(request_token, ())) = server.next().unwrap() else { todo!() };
 
 
 // acknowledge the request (consumes the token without sending a Response)
