@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1]
+
+### Changed
+
+- Docs updates.
+
+
 ## [0.7.0]
 
 ### Changed
