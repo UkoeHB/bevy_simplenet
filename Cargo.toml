@@ -11,6 +11,7 @@ repository = "https://github.com/UkoeHB/bevy_simplenet"
 
 [lib]
 path = "src/lib.rs"
+doctest = false
 test = false
 
 [[test]]

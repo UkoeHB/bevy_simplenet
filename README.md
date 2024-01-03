@@ -46,20 +46,13 @@ On WASM targets the client backend will not update while any other tasks are run
 
 ## Example
 
+### Setup
+
+**Common**
+
+Define a channel.
+
 ```rust
-// path shortcuts
-use bevy_simplenet::{
-    ChannelPack, ClientEventFrom, ServerEventFrom,
-    ServerFactory, ClientFactory, ServerReport, ClientReport,
-    AcceptorConfig, Authenticator, ServerConfig, AuthRequest,
-    ClientConfig, MessageStatus, RequestStatus, EnvType
-};
-use serde::{Deserialize, Serialize};
-use std::thread::sleep;
-use std::time::Duration;
-
-
-// define a channel
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestConnectMsg(pub String);
 
@@ -67,7 +60,13 @@ pub struct TestConnectMsg(pub String);
 pub struct TestServerMsg(pub u64);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TestServerResponse(pub u64);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestClientMsg(pub u64);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TestClientRequest(pub u64);
 
 #[derive(Debug, Clone)]
 pub struct TestChannel;
@@ -75,12 +74,17 @@ impl ChannelPack for TestChannel
 {
     type ConnectMsg = TestConnectMsg;
     type ServerMsg = TestServerMsg;
-    type ServerResponse = ();
+    type ServerResponse = TestServerResponse;
     type ClientMsg = TestClientMsg;
-    type ClientRequest = ();
+    type ClientRequest = TestClientRequest;
 }
+```
 
-type TestClientEvent = ClientEventFrom<TestChannel>;
+**Server**
+
+Prepare to make servers.
+
+```rust
 type TestServerEvent = ServerEventFrom<TestChannel>;
 
 fn server_factory() -> ServerFactory<TestChannel>
@@ -89,122 +93,143 @@ fn server_factory() -> ServerFactory<TestChannel>
     //   with env!("CARGO_PKG_VERSION")).
     ServerFactory::<TestChannel>::new("test")
 }
+```
+
+Make a server and insert it into an app.
+
+```rust
+fn setup_server(mut commands: Commands)
+{
+    let server = server_factory().new_server(
+            enfync::builtin::native::TokioHandle::default(),
+            "127.0.0.1:0",
+            AcceptorConfig::Default,
+            Authenticator::None,
+            ServerConfig::default(),
+        );
+    commands.insert_resource(server);
+}
+```
+
+**Client**
+
+Prepare to make clients.
+
+```rust
+type TestClientEvent = ClientEventFrom<TestChannel>;
 
 fn client_factory() -> ClientFactory<TestChannel>
 {
     // You must use the same protocol version string as the server factory.
     ClientFactory::<TestChannel>::new("test")
 }
-
-
-// enable tracing (with crate `tracing-subscriber`)
-/*
-let subscriber = tracing_subscriber::FmtSubscriber::builder()
-    .with_max_level(tracing::Level::TRACE)
-    .finish();
-tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-tracing::info!("README test start");
-*/
-
-
-// make a server
-let server = server_factory().new_server(
-        enfync::builtin::native::TokioHandle::default(),
-        "127.0.0.1:0",
-        AcceptorConfig::Default,
-        Authenticator::None,
-        ServerConfig::default(),
-    );
-assert_eq!(server.num_connections(), 0u64);
-
-
-// sleep duration for async machinery
-let sleep_duration = Duration::from_millis(15);
-
-
-// make a client
-let client_id = 0u128;
-let client = client_factory().new_client(
-        enfync::builtin::Handle::default(),  //automatically selects native/WASM runtime
-        server.url(),
-        AuthRequest::None{ client_id },
-        ClientConfig::default(),
-        TestConnectMsg(String::from("hello"))
-    );
-sleep(sleep_duration);
-assert_eq!(server.num_connections(), 1u64);
-
-
-// read connection reports
-let (
-        client_id,
-        TestServerEvent::Report(ServerReport::Connected(env_type, connect_msg))
-    ) = server.next().unwrap() else { todo!(); };
-let TestClientEvent::Report(ClientReport::Connected) = client.next().unwrap() else { todo!(); };
-assert_eq!(env_type, EnvType::Native);
-assert_eq!(connect_msg.0, String::from("hello"));
-
-
-// send message: client -> server
-let signal = client.send(TestClientMsg(42)).unwrap();
-assert_eq!(signal.status(), MessageStatus::Sending);
-sleep(sleep_duration);
-assert_eq!(signal.status(), MessageStatus::Sent);
-
-
-// read message from client
-let (
-        msg_client_id,
-        TestServerEvent::Msg(TestClientMsg(msg_val))
-    ) = server.next().unwrap() else { todo!() };
-assert_eq!(msg_client_id, client_id);
-assert_eq!(msg_val, 42);
-
-
-// send message: server -> client
-server.send(client_id, TestServerMsg(24)).unwrap();
-sleep(sleep_duration);
-
-
-// read message from server
-let TestClientEvent::Msg(TestServerMsg(msg_server_val)) = client.next().unwrap() else { todo!() };
-assert_eq!(msg_server_val, 24);
-
-
-// send request to server
-let signal = client.request(()).unwrap();
-assert_eq!(signal.status(), RequestStatus::Sending);
-sleep(sleep_duration);
-assert_eq!(signal.status(), RequestStatus::Waiting);
-
-
-// read request from client
-let (_, TestServerEvent::Request(request_token, ())) = server.next().unwrap() else { todo!() };
-
-
-// acknowledge the request (consumes the token without sending a Response)
-server.ack(request_token).unwrap();
-sleep(sleep_duration);
-assert_eq!(signal.status(), RequestStatus::Acknowledged);
-
-
-// read acknowledgement from server
-let TestClientEvent::Ack(request_id) = client.next().unwrap() else { todo!() };
-assert_eq!(request_id, signal.id());
-
-
-// client closes itself
-client.close();
-sleep(sleep_duration);
-assert_eq!(server.num_connections(), 0u64);
-
-
-// read disconnection messages
-let (_, TestServerEvent::Report(ServerReport::Disconnected)) = server.next().unwrap() else { todo!() };
-let TestClientEvent::Report(ClientReport::ClosedBySelf) = client.next().unwrap() else { todo!() };
-let TestClientEvent::Report(ClientReport::IsDead(_)) = client.next().unwrap() else { todo!() };
 ```
 
+Make a client and insert it into an app.
+
+```rust
+fn setup_client(mut commands: Commands)
+{
+    let client_id = 0u128;
+    let client = client_factory().new_client(
+            enfync::builtin::Handle::default(),  //automatically selects native/WASM runtime
+            server.url(),
+            AuthRequest::None{ client_id },
+            ClientConfig::default(),
+            TestConnectMsg(String::from("hello"))
+        );
+    commands.insert_resource(client);
+}
+```
+
+### Sending from the client
+
+Send a message.
+
+```rust
+fn send_client_message(client: Client<TestChannel>)
+{
+    let message_signal = client.send(TestClientMsg(42)).unwrap();
+}
+```
+
+Send a request.
+
+```rust
+fn send_client_request(client: Client<TestChannel>)
+{
+    let request_signal = client.request(TestClientRequest(24)).unwrap();
+}
+```
+
+### Sending from the Server
+
+Send a message.
+
+```rust
+fn send_server_message(server: Server<TestChannel>)
+{
+    server.send(0u128, TestServerMsg(111)).unwrap();
+}
+```
+
+Send a response.
+
+```rust
+fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>)
+{
+    server.respond(token, TestServerResponse(1)).unwrap();
+}
+```
+
+### Reading on the client
+
+```rust
+fn read_on_client(client: Client<TestChannel>)
+{
+    while let Some(client_event) = client.next()
+    {
+        match client_event
+        {
+            TestClientEvent::Report(connection_report) => match connection_report
+            {
+                ClientReport::Connected                => todo!(),
+                ClientReport::Disconnected             => todo!(),
+                ClientReport::ClosedByServer(reason)   => todo!(),
+                ClientReport::ClosedBySelf             => todo!(),
+                ClientReport::IsDead(pending_requests) => todo!(),
+            }
+            TestClientEvent::Msg(message)                   => todo!(),
+            TestClientEvent::Response(response, request_id) => todo!(),
+            TestClientEvent::Ack(request_id)                => todo!(),
+            TestClientEvent::Reject(request_id)             => todo!(),
+            TestClientEvent::SendFailed(request_id)         => todo!(),
+            TestClientEvent::ResponseLost(request_id)       => todo!(),
+        }
+    }
+}
+```
+
+### Reading on the server
+
+```rust
+fn read_on_server(server: Server<TestChannel>)
+{
+    while let Some((session_id, server_event)) = server.next()
+    {
+        match server_event
+        {
+            TestServerEvent::Report(connection_report) => match connection_report
+            {
+                ServerReport::Connected(env, message) => todo!(),
+                ServerReport::Disconnected            => todo!(),
+            }
+            TestServerEvent::Msg(message)            => todo!(),
+            TestServerEvent::Request(token, request) => todo!(),
+        }
+    }
+}
+```
 
 
 ## TODOs
