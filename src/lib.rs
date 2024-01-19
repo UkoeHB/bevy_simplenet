@@ -4,7 +4,7 @@
 
 //documentation
 #![doc = include_str!("../README.md")]
-#![allow(unused_imports)]
+#[allow(unused_imports)]
 use crate as bevy_simplenet;
 
 //module tree

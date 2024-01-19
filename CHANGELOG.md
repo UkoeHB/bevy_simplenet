@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2]
+
+### Changed
+
+- Bump nightly.
+
+
 ## [0.7.1]
 
 ### Changed
