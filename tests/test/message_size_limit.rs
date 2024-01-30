@@ -88,7 +88,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client with invalid connect message size
     let large_connect_msg = DemoConnectMsg(large_msg.clone());
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 67891u128 },
@@ -111,7 +111,7 @@ fn message_size_limit_test(max_msg_size: u32)
 
     // make client
     let connect_msg = DemoConnectMsg(String::from(""));
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 4678587u128 },

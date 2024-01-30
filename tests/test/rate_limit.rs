@@ -80,7 +80,7 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // make client
     let connect_msg = DemoConnectMsg(String::from("hello!"));
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime,
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 3578762u128 },

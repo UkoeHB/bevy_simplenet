@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0]
+
+### Fixed
+
+- Race condition that would allow a client to send a message/request when they have just connected but before the connection event has been consumed, which would allow the message/request to be sent based on stale client state.
+
+### Changed
+
+- `Client::next()` now requires mutable access in order to synchronize consuming connection events with sending messages/requests.
+
+
 ## [0.7.2]
 
 ### Changed

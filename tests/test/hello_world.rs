@@ -94,7 +94,7 @@ fn hello_world()
     // make client
     tracing::info!("ws hello world test: launching client...");
     let connect_msg1 = DemoConnectMsg(String::from("hello!"));
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
@@ -166,7 +166,7 @@ fn hello_world()
     // new client
     tracing::info!("ws hello world test: launching client 2...");
     let connect_msg2 = DemoConnectMsg(String::from("hello 2!"));
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url,
             bevy_simplenet::AuthRequest::None{ client_id: 872657u128 },

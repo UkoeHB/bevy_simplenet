@@ -76,7 +76,7 @@ fn request_response()
 
 
     // make client
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
@@ -165,7 +165,7 @@ fn request_ack()
 
 
     // make client
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
@@ -252,7 +252,7 @@ fn request_rejected()
 
 
     // make client
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },
@@ -339,7 +339,7 @@ fn request_dropped()
 
 
     // make client
-    let websocket_client = client_demo_factory().new_client(
+    let mut websocket_client = client_demo_factory().new_client(
             client_runtime.clone(),
             websocket_url.clone(),
             bevy_simplenet::AuthRequest::None{ client_id: 44718u128 },

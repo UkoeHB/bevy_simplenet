@@ -373,7 +373,7 @@ fn setup(mut commands: Commands, window: Query<Entity, (With<Window>, With<Prima
 
 fn handle_client_events(
     mut commands      : Commands,
-    client            : Res<DemoClient>,
+    mut client        : ResMut<DemoClient>,
     mut status        : ResMut<ConnectionStatus>,
     mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
 ){

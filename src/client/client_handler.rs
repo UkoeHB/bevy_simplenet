@@ -7,7 +7,7 @@ use bincode::Options;
 //standard shortcuts
 use core::fmt::Debug;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -23,8 +23,8 @@ pub(crate) struct ClientHandler<Channel: ChannelPack>
     pub(crate) client_event_sender: crossbeam::channel::Sender<ClientEventFrom<Channel>>,
     /// synchronized tracker for pending requests
     pub(crate) pending_requests: Arc<Mutex<PendingRequestTracker>>,
-    /// signal to communicate when the client handler is connected; synchronizes with connection events
-    pub(crate) client_connected_signal: Arc<AtomicBool>,
+    /// signal to communicate how many disconnects have occurred; synchronizes with connection events
+    pub(crate) client_disconnected_count: Arc<AtomicU16>,
     /// signal to communicate when the client handler is dead; synchronizes with draining the pending request cache
     pub(crate) client_closed_signal: Arc<AtomicBool>,
 }
@@ -187,13 +187,6 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             }
         }
 
-        // mark the client as connected
-        // - We do this within the pending requests lock in order to synchronize with the client API.
-        // - We place this between the last drained request and the Connected report in order to synchronize with
-        //   the event stream. All request failures occur between disconnected and connected client reports except
-        //   when the client is dying.
-        self.client_connected_signal.store(true, Ordering::Release);
-
         // forward connection event to client owner
         if let Err(err) = self.client_event_sender.send(ClientEventFrom::<Channel>::Report(ClientReport::Connected))
         {
@@ -214,6 +207,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         let Ok(mut pending_requests) = self.pending_requests.lock()
         else { return Ok(ezsockets::client::ClientCloseMode::Close); };
 
+        // note: We do NOT increment the disconnected counter here, since 'connect fail' just means we have remained
+        //       disconnected.
+
         // clean up pending requests
         Self::clean_pending_requests(&mut pending_requests, &self.client_event_sender);
 
@@ -232,7 +228,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
 
         // mark the client as disconnected
         // - We do this within the pending requests lock in order to synchronize with the client API.
-        self.client_connected_signal.store(false, Ordering::Release);
+        self.client_disconnected_count.fetch_add(1u16, Ordering::Release);
 
         // forward event to client owner
         if let Err(err) = self.client_event_sender.send(ClientEventFrom::<Channel>::Report(ClientReport::Disconnected))
@@ -268,7 +264,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
 
         // mark the client as disconnected
         // - We do this within the pending requests lock in order to synchronize with the client API.
-        self.client_connected_signal.store(false, Ordering::Release);
+        self.client_disconnected_count.fetch_add(1u16, Ordering::Release);
 
         // forward event to client owner
         if let Err(err) = self.client_event_sender.send(
@@ -393,7 +389,7 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
         //   with the client API. We want to prevent the client from sending requests after this lock zone, and we also
         //   want `Client::is_dead()` to only be true after the pending requests cache has been drained so that subsequent
         //   calls to `Client::next()` will reliably drain the client.
-        self.client_connected_signal.store(false, Ordering::Release);
+        self.client_disconnected_count.fetch_add(1u16, Ordering::Release);
         self.client_closed_signal.store(true, Ordering::Release);
     }
 }

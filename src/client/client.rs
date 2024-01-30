@@ -8,7 +8,7 @@ use bincode::Options;
 use core::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -36,8 +36,8 @@ pub struct Client<Channel: ChannelPack>
     client_event_receiver: crossbeam::channel::Receiver<ClientEventFrom<Channel>>,
     /// synchronized tracker for pending requests
     pending_requests: Arc<Mutex<PendingRequestTracker>>,
-    /// signal for when the internal client is connected
-    client_connected_signal: Arc<AtomicBool>,
+    /// signal for the number of internal disconnects encountered without handled connection events
+    client_disconnected_count: Arc<AtomicU16>,
     /// signal for when the internal client is shut down
     client_closed_signal: Arc<AtomicBool>,
     /// flag indicating the client closed itself
@@ -85,7 +85,7 @@ impl<Channel: ChannelPack> Client<Channel>
 
         // check if connected
         // - We do this after locking the pending requests cache in order to synchronize with dropping the internal
-        //   client handler, and to synchronize with reconnect cycles in the client backend.
+        //   client handler, and to synchronize with disconnect events in the client backend.
         if !self.is_connected() { tracing::warn!("tried to send request to disconnected client"); return Err(()); };
 
         // prep request id
@@ -115,9 +115,27 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Tries to get the next client event.
     ///
     /// When the client dies, the last event emitted will be `ClientEvent::Report(ClientReport::IsDead))`.
-    pub fn next(&self) -> Option<ClientEventFrom<Channel>>
+    ///
+    /// After a client disconnects, [`Self::is_connected`] will return `false` until all the
+    /// `ClientEvent::Report(ClientReport::Connected))` event for the most recent reconnect has been consumed.
+    /// Note that multiple disconnect/reconnect cycles can occur in the backend, so consuming a connected event
+    /// does not guarantee the client will be considered connected.
+    ///
+    // Note: This method is mutable so that message sending synchronizes with setting the connection signal. We
+    //       expect the caller will handle connection events atomically without interleaving unrelated messages.
+    pub fn next(&mut self) -> Option<ClientEventFrom<Channel>>
     {
         let Ok(msg) = self.client_event_receiver.try_recv() else { return None; };
+
+        // If we connected to the server, mark the client as connected.
+        // - We do this when consuming the connection report so client messages and requests cannot be sent
+        //   when the client has not yet realized it is connected.
+        //   Without this change, it is possible for client messages to be sent based on stale client state.
+        if let ClientEventFrom::<Channel>::Report(ClientReport::Connected) = &msg
+        {
+            self.client_disconnected_count.fetch_sub(1u16, Ordering::Release);
+        }
+
         Some(msg)
     }
 
@@ -132,7 +150,7 @@ impl<Channel: ChannelPack> Client<Channel>
     /// Messages and requests cannot be submitted when the client is not connected.
     pub fn is_connected(&self) -> bool
     {
-        self.client_connected_signal.load(Ordering::Acquire) && !self.is_closed()
+        self.client_disconnected_count.load(Ordering::Acquire) == 0 && !self.is_closed()
     }
 
     /// Tests if the client is dead (no longer connected to the server and won't reconnect).
@@ -272,9 +290,9 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         let client_event_sender_clone = client_event_sender.clone();
         let pending_requests = Arc::new(Mutex::new(PendingRequestTracker::default()));
         let pending_requests_clone = pending_requests.clone();
-        let client_connected_signal = Arc::new(AtomicBool::new(false));
+        let client_disconnected_count = Arc::new(AtomicU16::new(1u16));  //start at 1 for 'starting disconnected'
         let client_closed_signal = Arc::new(AtomicBool::new(false));
-        let client_connected_signal_clone = client_connected_signal.clone();
+        let client_disconnected_count_clone = client_disconnected_count.clone();
         let client_closed_signal_clone = client_closed_signal.clone();
         let (client, _client_task_handle) = ezsockets::connect_with(
                 move |client|
@@ -282,10 +300,10 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                     ClientHandler::<Channel>{
                             config,
                             client,
-                            client_event_sender     : client_event_sender_clone,
-                            pending_requests        : pending_requests_clone,
-                            client_connected_signal : client_connected_signal_clone,
-                            client_closed_signal    : client_closed_signal_clone,
+                            client_event_sender       : client_event_sender_clone,
+                            pending_requests          : pending_requests_clone,
+                            client_disconnected_count : client_disconnected_count_clone,
+                            client_closed_signal      : client_closed_signal_clone,
                         }
                 },
                 client_config,
@@ -301,7 +319,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                 client_event_sender,
                 client_event_receiver,
                 pending_requests,
-                client_connected_signal,
+                client_disconnected_count,
                 client_closed_signal,
                 closed_by_self: Arc::new(AtomicBool::new(false)),
             }
