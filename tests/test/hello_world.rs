@@ -131,7 +131,7 @@ fn hello_world()
     // send message: server -> client
     tracing::info!("ws hello world test: server sending msg...");
     let server_val = 24;
-    websocket_server.send(client_id, DemoServerMsg(server_val)).unwrap();
+    websocket_server.send(client_id, DemoServerMsg(server_val));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -147,7 +147,7 @@ fn hello_world()
             code   : ezsockets::CloseCode::Normal,
             reason : String::from("test")
         };
-    websocket_server.close_session(client_id, Some(closure_frame)).unwrap();
+    websocket_server.close_session(client_id, Some(closure_frame));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

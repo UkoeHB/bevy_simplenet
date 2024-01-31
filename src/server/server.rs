@@ -119,10 +119,9 @@ impl<Channel: ChannelPack> Server<Channel>
 {
     /// Sends a message to the target session.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
-    /// - Returns `Err` if an internal server error occurs.
-    pub fn send(&self, id: SessionId, msg: Channel::ServerMsg) -> Result<(), ()>
+    pub fn send(&self, id: SessionId, msg: Channel::ServerMsg)
     {
-        if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return Err(()); }
+        if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return; }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.client_event_sender.send(
@@ -130,16 +129,13 @@ impl<Channel: ChannelPack> Server<Channel>
             )
         {
             tracing::error!(?err, "failed to forward message to session");
-            return Err(());
+            return;
         }
-
-        Ok(())
     }
 
     /// Responds to a client request.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
-    /// - Returns `Err` if an internal server error occurs.
-    pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse) -> Result<(), ()>
+    pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse)
     {
         // check server liveness
         let client_id  = token.client_id();
@@ -147,14 +143,14 @@ impl<Channel: ChannelPack> Server<Channel>
         if self.is_dead()
         {
             tracing::warn!(client_id, request_id, "tried to send response to session but server is dead");
-            return Err(());
+            return;
         }
 
         // check token liveness
         if token.destination_is_dead()
         {
             tracing::debug!(client_id, request_id, "tried to send response to dead session");
-            return Ok(());
+            return;
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
@@ -168,18 +164,15 @@ impl<Channel: ChannelPack> Server<Channel>
             ))
         {
             tracing::error!(?err, "failed to forward response to session");
-            return Err(());
+            return;
         }
-
-        Ok(())
     }
 
     /// Acknowledges a client request.
     /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
-    /// - Returns `Err` if an internal server error occurs.
     ///
     /// An acknowledged request cannot be responded to.
-    pub fn ack(&self, token: RequestToken) -> Result<(), ()>
+    pub fn ack(&self, token: RequestToken)
     {
         // check server liveness
         let client_id  = token.client_id();
@@ -187,14 +180,14 @@ impl<Channel: ChannelPack> Server<Channel>
         if self.is_dead()
         {
             tracing::warn!(client_id, request_id, "tried to send ack to session but server is dead");
-            return Err(());
+            return;
         }
 
         // check token liveness
         if token.destination_is_dead()
         {
             tracing::debug!(client_id, request_id, "tried to send response to dead session");
-            return Ok(());
+            return;
         }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
@@ -205,10 +198,8 @@ impl<Channel: ChannelPack> Server<Channel>
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");
-            return Err(());
+            return;
         }
-
-        Ok(())
     }
 
     /// Rejects a client request.
@@ -220,24 +211,22 @@ impl<Channel: ChannelPack> Server<Channel>
     /// Closes the target session.
     ///
     /// The target session may remain open until some time after this method is called.
-    pub fn close_session(&self, id: SessionId, close_frame: Option<ezsockets::CloseFrame>) -> Result<(), ()>
+    pub fn close_session(&self, id: SessionId, close_frame: Option<ezsockets::CloseFrame>)
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         tracing::info!(id, "closing client");
         if self.is_dead()
         {
             tracing::warn!(id, "tried to close session but server is dead");
-            return Err(());
+            return;
         }
         if let Err(err) = self.client_event_sender.send(
                 SessionTargetMsg::new(id, SessionCommand::<Channel>::Close(close_frame))
             )
         {
             tracing::error!(?err, "failed to forward session close command to session");
-            return Err(());
+            return;
         }
-
-        Ok(())
     }
 
     /// Gets the next available server event

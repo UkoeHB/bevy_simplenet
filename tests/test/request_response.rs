@@ -116,7 +116,7 @@ fn request_response()
 
     // send response: server -> client
     let server_val = 24;
-    websocket_server.respond(token, DemoServerResponse(server_val)).unwrap();
+    websocket_server.respond(token, DemoServerResponse(server_val));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -204,7 +204,7 @@ fn request_ack()
 
 
     // send ack: server -> client
-    websocket_server.ack(token).unwrap();
+    websocket_server.ack(token);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -387,7 +387,7 @@ fn request_dropped()
             code   : ezsockets::CloseCode::Normal,
             reason : String::from("test")
         };
-    websocket_server.close_session(client_id, Some(closure_frame)).unwrap();
+    websocket_server.close_session(client_id, Some(closure_frame));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -421,7 +421,7 @@ fn request_dropped()
 
 
     // try to acknowledge the token (nothing should happen since the original target session was replaced)
-    websocket_server.ack(token).unwrap();
+    websocket_server.ack(token);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::ResponseLost);

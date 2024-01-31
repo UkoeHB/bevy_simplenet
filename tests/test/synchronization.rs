@@ -193,7 +193,7 @@ fn client_send_sync_request()
 
     let Some((_, DemoServerEvent::Request(token, ()))) = websocket_server.next() else { unreachable!() };
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Waiting);
-    websocket_server.ack(token).unwrap();
+    websocket_server.ack(token);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

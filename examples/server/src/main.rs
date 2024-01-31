@@ -50,7 +50,7 @@ fn send_new_button_state(
 ){
     for client_id in clients.0.iter()
     {
-        let _ = server.send(*client_id, DemoServerMsg::Current(state.0));
+        server.send(*client_id, DemoServerMsg::Current(state.0));
     }
 }
 
@@ -79,7 +79,7 @@ fn handle_server_events(
                     // send current server state to client
                     // - we must use new_button_state to ensure the order of events is preserved
                     let current_state = new_button_state;
-                    let _ = server.send(client_id, DemoServerMsg::Current(current_state));
+                    server.send(client_id, DemoServerMsg::Current(current_state));
                 }
                 bevy_simplenet::ServerReport::Disconnected =>
                 {
@@ -96,7 +96,7 @@ fn handle_server_events(
                 DemoClientRequest::Select =>
                 {
                     // acknowldge selection
-                    let _ = server.ack(token);
+                    server.ack(token);
 
                     // update button
                     new_button_state = Some(client_id);

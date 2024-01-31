@@ -9,6 +9,7 @@
 ### Changed
 
 - `Client::next()` now requires mutable access in order to synchronize consuming connection events with sending messages/requests.
+- `Server` API no longer returns `Result`.
 
 
 ## [0.7.2]

@@ -169,7 +169,7 @@ Send a message.
 ```rust
 fn send_server_message(server: Server<TestChannel>)
 {
-    server.send(0u128, TestServerMsg(111)).unwrap();
+    server.send(0u128, TestServerMsg(111));
 }
 ```
 
@@ -178,7 +178,7 @@ Send a response.
 ```rust
 fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>)
 {
-    server.respond(token, TestServerResponse(1)).unwrap();
+    server.respond(token, TestServerResponse(1));
 }
 ```
 
