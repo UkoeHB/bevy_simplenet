@@ -96,7 +96,7 @@ fn request_response()
 
     // send request: client -> server
     let client_val = 42;
-    let signal = websocket_client.request(DemoClientRequest(client_val)).unwrap();
+    let signal = websocket_client.request(DemoClientRequest(client_val));
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -185,7 +185,7 @@ fn request_ack()
 
     // send request: client -> server
     let client_val = 42;
-    let signal = websocket_client.request(DemoClientRequest(client_val)).unwrap();
+    let signal = websocket_client.request(DemoClientRequest(client_val));
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -272,7 +272,7 @@ fn request_rejected()
 
     // send request: client -> server
     let client_val = 42;
-    let signal = websocket_client.request(DemoClientRequest(client_val)).unwrap();
+    let signal = websocket_client.request(DemoClientRequest(client_val));
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -363,7 +363,7 @@ fn request_dropped()
 
     // send request: client -> server
     let client_val = 42;
-    let signal = websocket_client.request(DemoClientRequest(client_val)).unwrap();
+    let signal = websocket_client.request(DemoClientRequest(client_val));
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

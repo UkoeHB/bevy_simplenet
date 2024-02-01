@@ -52,62 +52,82 @@ impl<Channel: ChannelPack> Client<Channel>
     /// will fail if the underlying client becomes disconnected.
     ///
     /// Returns `Err` if the client is not connected.
-    pub fn send(&self, msg: Channel::ClientMsg) -> Result<MessageSignal, ()>
+    pub fn send(&self, msg: Channel::ClientMsg) -> MessageSignal
     {
         // check if connected
-        if !self.is_connected() { tracing::warn!("tried to send message to disconnected client"); return Err(()); }
+        if !self.is_connected()
+        {
+            tracing::warn!("tried to send message to disconnected client");
+            return MessageSignal::new(MessageStatus::Failed);
+        }
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ServerMetaEventFrom::<Channel>::Msg(msg))
-        else { tracing::error!("failed serializing client message"); return Err(()); };
+        else
+        {
+            tracing::error!("failed serializing client message");
+            return MessageSignal::new(MessageStatus::Failed);
+        };
 
         match self.client.binary(ser_msg)
         {
-            Ok(signal) => Ok(signal),
+            Ok(signal) => signal,
             Err(_) =>
             {
                 tracing::warn!("tried to send message to dead client");
-                Err(())
+                MessageSignal::new(MessageStatus::Failed)
             }
         }
     }
 
     /// Sends a request to the server.
     ///
-    /// Returns `Ok(RequestSignal)` on success. The signal can be used to track the message status. Requests
-    /// will fail if the underlying client becomes disconnected.
+    /// Returns `RequestSignal`. The signal can be used to track the message status.
+    /// Requests will fail if the underlying client is or becomes disconnected.
     ///
-    /// Returns `Err` if the client is not connected.
-    pub fn request(&self, request: Channel::ClientRequest) -> Result<RequestSignal, ()>
+    /// Failed requests will always emit a client event unless the client has a critical internal error.
+    pub fn request(&self, request: Channel::ClientRequest) -> RequestSignal
     {
         // lock pending requests
-        let Ok(mut pending_requests) = self.pending_requests.lock() else { return Err(()); };
+        let Ok(mut pending_requests) = self.pending_requests.lock()
+        else
+        {
+            tracing::error!("the client experienced a critical internal error");
+            return RequestSignal::new(u64::MAX, MessageSignal::new(MessageStatus::Failed));
+        };
+
+        // prep request id
+        let request_id = pending_requests.reserve_id();
 
         // check if connected
         // - We do this after locking the pending requests cache in order to synchronize with dropping the internal
         //   client handler, and to synchronize with disconnect events in the client backend.
-        if !self.is_connected() { tracing::warn!("tried to send request to disconnected client"); return Err(()); };
-
-        // prep request id
-        let request_id = pending_requests.reserve_id();
+        if !self.is_connected()
+        {
+            tracing::warn!("tried to send request to disconnected client");
+            return pending_requests.add_request(request_id, MessageSignal::new(MessageStatus::Failed));
+        };
 
         // forward message to server
         let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
                 &ServerMetaEventFrom::<Channel>::Request(request, request_id)
             )
-        else { tracing::error!("failed serializing client request"); return Err(()); };
+        else
+        {
+            tracing::error!("failed serializing client request");
+            return pending_requests.add_request(request_id, MessageSignal::new(MessageStatus::Failed));
+        };
 
         match self.client.binary(ser_msg)
         {
             Ok(signal) =>
             {
-                let request_signal = pending_requests.add_request(request_id, signal);
-                Ok(request_signal)
+                pending_requests.add_request(request_id, signal)
             }
             Err(_) =>
             {
                 tracing::warn!("tried to send request to dead client");
-                Err(())
+                pending_requests.add_request(request_id, MessageSignal::new(MessageStatus::Failed))
             }
         }
     }
@@ -117,12 +137,12 @@ impl<Channel: ChannelPack> Client<Channel>
     /// When the client dies, the last event emitted will be `ClientEvent::Report(ClientReport::IsDead))`.
     ///
     /// After a client disconnects, [`Self::is_connected`] will return `false` until all the
-    /// `ClientEvent::Report(ClientReport::Connected))` event for the most recent reconnect has been consumed.
-    /// Note that multiple disconnect/reconnect cycles can occur in the backend, so consuming a connected event
+    /// `ClientEvent::Report(ClientReport::Connected))` events for the most recent reconnect has been consumed.
+    /// Note that multiple disconnect/reconnect cycles can occur in the backend, so consuming one connected event
     /// does not guarantee the client will be considered connected.
     ///
-    // Note: This method is mutable so that message sending synchronizes with setting the connection signal. We
-    //       expect the caller will handle connection events atomically without interleaving unrelated messages.
+    /// Note: This method is mutable so that message sending synchronizes with setting the connection signal. We
+    ///       expect the caller will handle connection events atomically without interleaving unrelated messages.
     pub fn next(&mut self) -> Option<ClientEventFrom<Channel>>
     {
         let Ok(msg) = self.client_event_receiver.try_recv() else { return None; };

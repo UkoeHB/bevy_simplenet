@@ -10,6 +10,7 @@
 
 - `Client::next()` now requires mutable access in order to synchronize consuming connection events with sending messages/requests.
 - `Server` API no longer returns `Result`.
+- `Client` API no longer returns `Result`. The minimum `ezsockets` dependency is now `v0.6.2`.
 
 
 ## [0.7.2]

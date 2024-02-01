@@ -152,12 +152,7 @@ fn handle_button_select(
     }
 
     // send select request
-    let Ok(signal) = client.request(DemoClientRequest::Select)
-    else
-    {
-        commands.add(deselect_callback.clone());
-        return;
-    };
+    let signal = client.request(DemoClientRequest::Select);
 
     // save the predicted input
     pending_select.0   = Some(signal);

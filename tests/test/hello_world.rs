@@ -116,7 +116,7 @@ fn hello_world()
     // send message: client -> server
     tracing::info!("ws hello world test: client sending msg...");
     let client_val = 42;
-    let signal = websocket_client.send(DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(DemoClientMsg(client_val));
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

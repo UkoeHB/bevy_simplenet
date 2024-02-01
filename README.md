@@ -149,7 +149,7 @@ Send a message.
 ```rust
 fn send_client_message(client: Client<TestChannel>)
 {
-    let message_signal = client.send(TestClientMsg(42)).unwrap();
+    let message_signal = client.send(TestClientMsg(42));
 }
 ```
 
@@ -158,7 +158,7 @@ Send a request.
 ```rust
 fn send_client_request(client: Client<TestChannel>)
 {
-    let request_signal = client.request(TestClientRequest(24)).unwrap();
+    let request_signal = client.request(TestClientRequest(24));
 }
 ```
 
@@ -185,7 +185,7 @@ fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>
 ### Reading on the client
 
 ```rust
-fn read_on_client(client: Client<TestChannel>)
+fn read_on_client(mut client: Client<TestChannel>)
 {
     while let Some(client_event) = client.next()
     {

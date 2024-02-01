@@ -64,16 +64,16 @@ tokio       = { version = "1.29", optional = true }
 wasm-timer = { version = "0.2" }
 
 [dependencies.ezsockets]
-version          = "0.6"
+version          = "0.6.2"
 default-features = false
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
-version          = "0.6"
+version          = "0.6.2"
 default-features = false
 features         = [ "native_client" ]  #todo: how to configure target on 'client' feature?
 
 [target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
-version          = "0.6"
+version          = "0.6.2"
 default-features = false
 features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature?
 

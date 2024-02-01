@@ -101,7 +101,7 @@ fn rate_limit_test(max_count_per_period: u32)
 
     // send message: client -> server
     let client_val = 42;
-    let signal = websocket_client.send(DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(DemoClientMsg(client_val));
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -119,7 +119,7 @@ fn rate_limit_test(max_count_per_period: u32)
     let mut signals = Vec::new();
     for _ in 0..max_count_per_period
     {
-        signals.push(websocket_client.send(DemoClientMsg(client_val)).unwrap());
+        signals.push(websocket_client.send(DemoClientMsg(client_val)));
     }
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -147,7 +147,7 @@ fn rate_limit_test(max_count_per_period: u32)
     let mut signals = Vec::new();
     for _ in 0..(max_count_per_period + 1)
     {
-        signals.push(websocket_client.send(DemoClientMsg(client_val)).unwrap());
+        signals.push(websocket_client.send(DemoClientMsg(client_val)));
     }
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

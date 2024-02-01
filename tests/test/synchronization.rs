@@ -94,7 +94,8 @@ fn client_send_sync_msg()
 
     // sending a message before the client report is consumed should fail
     let client_val = 24;
-    let Err(()) = websocket_client.send(DemoClientMsg(client_val)) else { unreachable!(); };
+    let signal = websocket_client.send(DemoClientMsg(client_val));
+    assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Failed);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -108,7 +109,7 @@ fn client_send_sync_msg()
 
     // sending a message after the client report is consumed should succeed
     let client_val = 42;
-    let signal = websocket_client.send(DemoClientMsg(client_val)).unwrap();
+    let signal = websocket_client.send(DemoClientMsg(client_val));
     assert_eq!(signal.status(), bevy_simplenet::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
@@ -173,7 +174,8 @@ fn client_send_sync_request()
     else { unreachable!() };
 
     // sending a request before the client report is consumed should fail
-    let Err(()) = websocket_client.request(()) else { unreachable!(); };
+    let signal = websocket_client.request(());
+    assert_eq!(signal.status(), bevy_simplenet::RequestStatus::SendFailed);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 
@@ -186,7 +188,7 @@ fn client_send_sync_request()
 
 
     // sending a request after the client report is consumed should succeed
-    let signal = websocket_client.request(()).unwrap();
+    let signal = websocket_client.request(());
     assert_eq!(signal.status(), bevy_simplenet::RequestStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery

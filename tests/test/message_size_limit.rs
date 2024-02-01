@@ -130,7 +130,7 @@ fn message_size_limit_test(max_msg_size: u32)
     assert_eq!(websocket_server.num_connections(), 1u64);
 
     // send message with invalid size: client -> server
-    let signal = websocket_client.send(DemoClientMsg(large_msg)).unwrap();
+    let signal = websocket_client.send(DemoClientMsg(large_msg));
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sending);
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
