@@ -2,7 +2,7 @@
 name = "bevy_simplenet"
 description = "Simple server/client channel implemented over websockets with support for Bevy"
 authors = ["koe <ukoe@protonmail.com>"]
-version = "0.7.2"
+version = "0.8.0"
 edition = "2021"
 keywords = ["gamedev", "networking", "wasm"]
 license = "MIT OR Apache-2.0"

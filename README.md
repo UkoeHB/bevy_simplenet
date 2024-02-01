@@ -234,7 +234,6 @@ fn read_on_server(server: &mut Server<TestChannel>)
 
 ## TODOs
 
-- Fix race condition that allows sending a client or server message to a new session before the old session's `Disconnected` event has been processed.
 - Fix linker errors when the `bevy/dynamic_linking` feature is enabled.
 - Implement `AuthToken` for client/server authentication.
 - Add server shut down procedure.
