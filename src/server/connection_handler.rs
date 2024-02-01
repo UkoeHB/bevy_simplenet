@@ -43,9 +43,11 @@ pub(crate) struct ConnectionHandler<Channel: ChannelPack>
     pub(crate) config: ServerConfig,
     /// counter for number of connections
     pub(crate) connection_counter: ConnectionCounter,
+    /// counter for total number of connections encountered
+    pub(crate) total_connections_count: u64,
 
     /// registered sessions
-    pub(crate) session_registry: HashMap<SessionId, ezsockets::Session<SessionId, ()>>,
+    pub(crate) session_registry: HashMap<SessionId, (u64, ezsockets::Session<SessionId, ()>)>,
 
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
@@ -94,6 +96,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 
         // increment the connection counter now so the updated value is available asap
         self.connection_counter.increment();
+        self.total_connections_count += 1;
 
         // make a session
         let session_id        = info.id;
@@ -129,7 +132,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
             );
 
         // register the session
-        self.session_registry.insert(info.id, session.clone());
+        self.session_registry.insert(info.id, (self.total_connections_count, session.clone()));
 
         Ok(session)
     }
@@ -166,7 +169,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     ) -> Result<(), ezsockets::Error>
     {
         // try to get targeted session (ignore if missing)
-        let Some(session) = self.session_registry.get(&session_msg.id)
+        let Some((connection_idx, session)) = self.session_registry.get(&session_msg.id)
         else
         {
             tracing::debug!(session_msg.id, "dropping message sent to unknown session");
@@ -178,15 +181,26 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
         {
             //todo: consider marshalling the message into the session via Session::call() so the session's
             //      thread can do serializing instead of the connection handler which is a bottleneck
-            SessionCommand::<Channel>::Send(msg_to_send, maybe_death_signal) =>
+            SessionCommand::<Channel>::Send(msg_to_send, maybe_consumed_count, maybe_death_signal) =>
             {
+                // check if the connection event for the target session was consumed before this message was sent
+                if let Some(consumed_count) = maybe_consumed_count
+                {
+                    if consumed_count < *connection_idx
+                    {
+                        tracing::debug!(consumed_count, connection_idx,
+                            "dropping message targeted at session before its connection event was handled");
+                        return Ok(());
+                    }
+                }
+
                 // check if the target session is still alive (for request/response patterns)
                 // - note that this check synchronizes with the session registry, guaranteeing our response can only be
                 //   sent to the request's originating session
                 if let Some(death_signal) = maybe_death_signal
                 {
                     if death_signal.is_dead()
-                    { tracing::debug!("dropping response targeted at dead session"); return Ok(()); }
+                    { tracing::debug!(session_msg.id, "dropping response targeted at dead session"); return Ok(()); }
                 }
 
                 // serialize message

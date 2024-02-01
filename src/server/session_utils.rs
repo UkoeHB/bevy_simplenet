@@ -44,10 +44,13 @@ pub(crate) enum SessionCommand<Channel: ChannelPack>
 {
     /// Send a client meta event.
     ///
+    /// Includes an optional 'connection events consumed counter' for use in synchronizing message sends with
+    /// connection events.
+    ///
     /// Includes an optional 'death signal' for the target session of responses. We need this signal in order to
     /// address a race condition between the server API and the server backend where a response for a request received
     /// by an old session could be sent via a new session.
-    Send(ClientMetaEventFrom<Channel>, Option<SessionDeathSignal>),
+    Send(ClientMetaEventFrom<Channel>, Option<u64>, Option<SessionDeathSignal>),
     /// Close a session.
     Close(Option<ezsockets::CloseFrame>)
 }

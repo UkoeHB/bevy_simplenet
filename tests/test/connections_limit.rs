@@ -60,7 +60,7 @@ fn connections_limit_test(max_connections: u32)
     let client_runtime = enfync::builtin::Handle::default();
 
     // launch websocket server
-    let websocket_server = server_demo_factory().new_server(
+    let mut websocket_server = server_demo_factory().new_server(
             server_runtime,
             "127.0.0.1:0",
             bevy_simplenet::AcceptorConfig::Default,

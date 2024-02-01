@@ -59,7 +59,7 @@ fn send_new_button_state(
 
 fn handle_server_events(
     mut rcommands : ReactCommands,
-    server        : Res<DemoServer>,
+    mut server    : ResMut<DemoServer>,
     mut clients   : ResMut<ClientConnections>,
     mut state     : ReactResMut<ButtonState>,
 ){

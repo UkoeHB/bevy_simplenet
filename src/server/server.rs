@@ -101,6 +101,8 @@ pub struct Server<Channel: ChannelPack>
     uses_tls: bool,
     /// The number of current connections.
     connection_counter: ConnectionCounter,
+    /// The number of connection events consumed.
+    consumed_connection_events: u64,
 
     /// Sends client events to the internal connection handler.
     client_event_sender: tokio::sync::mpsc::UnboundedSender<
@@ -118,14 +120,23 @@ pub struct Server<Channel: ChannelPack>
 impl<Channel: ChannelPack> Server<Channel>
 {
     /// Sends a message to the target session.
-    /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    ///
+    /// Messages will be silently dropped if the client is not connected *or* if the
+    /// client is connected but there are unconsumed connection reports for that client.
     pub fn send(&self, id: SessionId, msg: Channel::ServerMsg)
     {
         if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return; }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.client_event_sender.send(
-                SessionTargetMsg::new(id, SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Msg(msg), None))
+                SessionTargetMsg::new(
+                    id,
+                    SessionCommand::<Channel>::Send(
+                        ClientMetaEventFrom::<Channel>::Msg(msg),
+                        Some(self.consumed_connection_events),
+                        None
+                    )
+                )
             )
         {
             tracing::error!(?err, "failed to forward message to session");
@@ -134,7 +145,11 @@ impl<Channel: ChannelPack> Server<Channel>
     }
 
     /// Responds to a client request.
-    /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    /// 
+    /// Messages will be silently dropped if the specific session that produced the original request is not connected.
+    /// Note that the client may have reconnected with a fresh session, but
+    /// the response will still be dropped. This ensures reconnects are strongly synchronized (requests cannot leak
+    /// across sessions).
     pub fn respond(&self, token: RequestToken, response: Channel::ServerResponse)
     {
         // check server liveness
@@ -159,6 +174,7 @@ impl<Channel: ChannelPack> Server<Channel>
                 client_id,
                 SessionCommand::<Channel>::Send(
                     ClientMetaEventFrom::<Channel>::Response(response, request_id),
+                    None,
                     Some(death_signal)
                 )
             ))
@@ -169,7 +185,11 @@ impl<Channel: ChannelPack> Server<Channel>
     }
 
     /// Acknowledges a client request.
-    /// - Messages will be silently dropped if the session is not connected (there may or may not be a trace message).
+    /// 
+    /// Messages will be silently dropped if the specific session that produced the original request is not connected.
+    /// Note that the client may have reconnected with a fresh session, but
+    /// the response will still be dropped. This ensures reconnects are strongly synchronized (requests cannot leak
+    /// across sessions).
     ///
     /// An acknowledged request cannot be responded to.
     pub fn ack(&self, token: RequestToken)
@@ -194,7 +214,7 @@ impl<Channel: ChannelPack> Server<Channel>
         let (request_id, death_signal) = token.take();
         if let Err(err) = self.client_event_sender.send(SessionTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Ack(request_id), Some(death_signal))
+                SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Ack(request_id), None, Some(death_signal))
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");
@@ -229,11 +249,20 @@ impl<Channel: ChannelPack> Server<Channel>
         }
     }
 
-    /// Gets the next available server event
-    pub fn next(&self) -> Option<(SessionId, ServerEventFrom<Channel>)>
+    /// Gets the next available server event.
+    pub fn next(&mut self) -> Option<(SessionId, ServerEventFrom<Channel>)>
     {
-        let Ok(msg) = self.server_event_receiver.try_recv() else { return None; };
-        Some((msg.id, msg.msg))
+        let Ok(SessionSourceMsg{ id, msg }) = self.server_event_receiver.try_recv() else { return None; };
+
+        // count the number of connection events received
+        if let ServerEventFrom::<Channel>::Report(ServerReport::Connected(_, _)) = &msg
+        {
+            // we assume this never rolls over
+            // - it should last 30million years even with 1mill new connections per minute
+            self.consumed_connection_events += 1u64;
+        }
+
+        Some((id, msg))
     }
 
     /// Gets the server's url.
@@ -307,8 +336,9 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
                         move |_server|
                         ConnectionHandler::<Channel>{
                                 config,
-                                connection_counter: connection_counter_clone,
-                                session_registry: HashMap::default(),
+                                connection_counter      : connection_counter_clone,
+                                total_connections_count : 0u64,
+                                session_registry        : HashMap::default(),
                                 server_event_sender,
                             }
                     )
@@ -356,6 +386,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
                 server_address,
                 uses_tls,
                 connection_counter,
+                consumed_connection_events: 0u64,
                 client_event_sender: server.into(),  //extract the call sender
                 server_event_receiver,
                 server_closed_signal,

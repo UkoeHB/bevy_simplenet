@@ -185,7 +185,7 @@ fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>
 ### Reading on the client
 
 ```rust
-fn read_on_client(mut client: Client<TestChannel>)
+fn read_on_client(client: &mut Client<TestChannel>)
 {
     while let Some(client_event) = client.next()
     {
@@ -213,7 +213,7 @@ fn read_on_client(mut client: Client<TestChannel>)
 ### Reading on the server
 
 ```rust
-fn read_on_server(server: Server<TestChannel>)
+fn read_on_server(server: &mut Server<TestChannel>)
 {
     while let Some((session_id, server_event)) = server.next()
     {

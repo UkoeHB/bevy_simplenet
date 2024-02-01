@@ -5,10 +5,12 @@
 ### Fixed
 
 - Race condition that would allow a client to send a message/request when they have just connected but before the connection event has been consumed, which would allow the message/request to be sent based on stale client state.
+- Similar race condition in the server for server messages. Server requests were already synchronized.
 
 ### Changed
 
 - `Client::next()` now requires mutable access in order to synchronize consuming connection events with sending messages/requests.
+- `Server::next()` now requires mutable access in order to synchronize consuming connection events with sending messages.
 - `Server` API no longer returns `Result`.
 - `Client` API no longer returns `Result`. The minimum `ezsockets` dependency is now `v0.6.2`.
 
