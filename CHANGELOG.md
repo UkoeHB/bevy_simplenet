@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1]
+
+### Changed
+
+- Log an error when the client's internal lock fails.
+
+
 ## [0.9.0]
 
 ### Changed

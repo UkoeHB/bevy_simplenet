@@ -101,7 +101,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             {
                 // discard message if request id is unknown
                 // - this should never happen
-                let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+                let Ok(mut pending_requests) = self.pending_requests.lock()
+                else { tracing::error!("Response lock error"); return Ok(()); };
+
                 if !pending_requests.set_status_and_remove(request_id, RequestStatus::Responded)
                 {
                     tracing::error!(request_id, "ignoring server response for unknown request");
@@ -115,7 +117,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             {
                 // discard message if request id is unknown
                 // - this should never happen
-                let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+                let Ok(mut pending_requests) = self.pending_requests.lock()
+                else { tracing::error!("Ack lock error"); return Ok(()); };
+
                 if !pending_requests.set_status_and_remove(request_id, RequestStatus::Acknowledged)
                 {
                     tracing::error!(request_id, "ignoring server ack for unknown request");
@@ -129,7 +133,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             {
                 // discard message if request id is unknown
                 // - this should never happen
-                let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+                let Ok(mut pending_requests) = self.pending_requests.lock()
+                else { tracing::error!("Reject lock error"); return Ok(()); };
+
                 if !pending_requests.set_status_and_remove(request_id, RequestStatus::Rejected)
                 {
                     tracing::error!(request_id, "ignoring server rejection for unknown request");
@@ -167,7 +173,8 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         tracing::info!("connected");
 
         // lock the pending requests cache
-        let Ok(mut pending_requests) = self.pending_requests.lock() else { return Ok(()); };
+        let Ok(mut pending_requests) = self.pending_requests.lock()
+        else { tracing::error!("on_connect() lock error"); return Ok(()); };
 
         // clean up existing requests
         // - do this before sending connection event so the event stream is synchronized
@@ -205,7 +212,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     {
         // lock the pending requests cache
         let Ok(mut pending_requests) = self.pending_requests.lock()
-        else { return Ok(ezsockets::client::ClientCloseMode::Close); };
+        else { tracing::error!("on_connect_fail() lock error");  return Ok(ezsockets::client::ClientCloseMode::Close); };
 
         // note: We do NOT increment the disconnected counter here, since 'connect fail' just means we have remained
         //       disconnected.
@@ -224,7 +231,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
 
         // lock the pending requests cache
         let Ok(mut pending_requests) = self.pending_requests.lock()
-        else { return Ok(ezsockets::client::ClientCloseMode::Close); };
+        else { tracing::error!("on_disconnect() lock error"); return Ok(ezsockets::client::ClientCloseMode::Close); };
 
         // mark the client as disconnected
         // - We do this within the pending requests lock in order to synchronize with the client API.
@@ -260,7 +267,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
 
         // lock the pending requests cache
         let Ok(mut pending_requests) = self.pending_requests.lock()
-        else { return Ok(ezsockets::client::ClientCloseMode::Close); };
+        else { tracing::error!("on_close() lock error"); return Ok(ezsockets::client::ClientCloseMode::Close); };
 
         // mark the client as disconnected
         // - We do this within the pending requests lock in order to synchronize with the client API.
@@ -369,7 +376,8 @@ impl<Channel: ChannelPack> Drop for ClientHandler<Channel>
         tracing::info!("dropping client");
 
         // lock the pending requests cache
-        let Ok(mut pending_requests) = self.pending_requests.lock() else { return; };
+        let Ok(mut pending_requests) = self.pending_requests.lock()
+        else { tracing::error!("drop() lock error"); return; };
 
         // abort all pending requests
         // - do this before the client report so IsDead is the last event emitted
