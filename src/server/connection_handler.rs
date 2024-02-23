@@ -87,7 +87,8 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 SessionSourceMsg::new(info.id, ServerEventFrom::<Channel>::Report(report))
             )
         {
-            tracing::error!(?err, "forwarding connection report failed");
+            // This is not an error if the connect was received when shutting down the server.
+            tracing::warn!(?err, "forwarding connection report failed");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Error,
                     reason : String::from("Server internal error.")
@@ -155,7 +156,8 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 SessionSourceMsg::new(id, ServerEventFrom::<Channel>::Report(report))
             )
         {
-            tracing::error!(?err, "forwarding disconnect report failed");
+            // This is not an error if the disconnect was received when shutting down the server.
+            tracing::warn!(?err, "forwarding disconnect report failed");
             return Err(Box::new(ConnectionError::SystemError));
         }
 
