@@ -4,7 +4,7 @@ use bevy_simplenet_common::*;
 //third-party shortcuts
 use bevy::app::*;
 use bevy::prelude::*;
-use bevy_kot_ecs::*;
+use bevy_cobweb::prelude::*;
 
 //standard shortcuts
 use std::collections::HashSet;
