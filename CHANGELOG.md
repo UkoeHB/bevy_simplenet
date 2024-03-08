@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2]
+
+### Added
+
+- Trace statements when a client sends a message or request.
+
+
 ## [0.9.1]
 
 ### Changed

@@ -71,7 +71,11 @@ impl<Channel: ChannelPack> Client<Channel>
 
         match self.client.binary(ser_msg)
         {
-            Ok(signal) => signal,
+            Ok(signal) =>
+            {
+                tracing::trace!("sending message to server");
+                signal
+            }
             Err(_) =>
             {
                 tracing::warn!("tried to send message to dead client");
@@ -122,6 +126,7 @@ impl<Channel: ChannelPack> Client<Channel>
         {
             Ok(signal) =>
             {
+                tracing::trace!("sending request to server");
                 pending_requests.add_request(request_id, signal)
             }
             Err(_) =>
