@@ -63,7 +63,7 @@ impl RateLimitTracker
                 config,
                 timer: Instant::now(),
                 next_checkpoint_time,
-                count: 1u64
+                count: 0u64
             }
     }
 

@@ -15,19 +15,32 @@ use std::vec::Vec;
 #[derive(Debug)]
 pub(crate) struct SessionHandler<Channel: ChannelPack>
 {
+    /// authenticator used to evaluate authentication requests
+    pub(crate) authenticator: Arc<Authenticator>,
+
     /// id of this session
     pub(crate) id: SessionId,
+    /// client id for this session
+    ///
+    /// Unavailable until the client is authenticated.
+    pub(crate) client_id: Option<ClientId>,
     /// this session
     pub(crate) session: ezsockets::Session<SessionId, ()>,
+    /// oneshot to notify the server when this session has become authenticated
+    pub(crate) auth_signal_sender: tokio::sync::mpsc::Sender::<()>,
+    /// Sends client events to the internal connection handler.
+    pub(crate) client_event_sender: tokio::sync::mpsc::UnboundedSender<
+        ClientTargetMsg<ClientId, SessionCommand<Channel>>
+    >,
     /// sender for forwarding messages from the session's client to the server
     pub(crate) server_event_sender: crossbeam::channel::Sender<
-        SessionSourceMsg<SessionId, ServerEventFrom<Channel>>
+        ClientSourceMsg<ClientId, ServerEventFrom<Channel>>
     >,
 
     /// config: maximum message size (bytes)
     pub(crate) max_msg_size: u32,
     /// client's environment type
-    pub(crate) client_env_type: EnvType,
+    pub(crate) env_type: EnvType,
 
     /// rate limit tracker
     pub(crate) rate_limit_tracker: RateLimitTracker,
@@ -54,7 +67,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
     // Receive text from client (via session connection).
     async fn on_text(&mut self, text: String) -> Result<(), ezsockets::Error>
     {
-        match self.client_env_type
+        match self.env_type
         {
             EnvType::Native =>
             {
@@ -130,11 +143,56 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
         // decide what to do with the message
         match message
         {
+            ServerMetaEventFrom::<Channel>::Authenticate(msg) =>
+            {
+                // disconnect client if already authenticated
+                if self.client_id.is_some()
+                {
+                    self.close("extra auth message"); return Ok(());
+                }
+
+                // authenticate the connection
+                if !self.authenticator.authenticate(&msg.auth)
+                {
+                    self.close("invalid auth"); return Ok(());
+                }
+                self.client_id = Some(msg.auth.client_id());
+
+                // notify auto-disconnector not to disconnect this client
+                if self.auth_signal_sender.try_send(()).is_err()
+                {
+                    // If notifying the auto-disconnector fails then this session timed out.
+                    return Ok(());
+                }
+
+                // report the new connection to the connection handler so it can move the session from pending to connected
+                if let Err(err) = self.client_event_sender.send(
+                        ClientTargetMsg::new(
+                            msg.auth.client_id(),
+                            SessionCommand::Add{
+                                session_id: self.id,
+                                msg: msg.msg,
+                                env_type: self.env_type
+                            }
+                        )
+                    )
+                {
+                    tracing::debug!(?err, "authenticated notifier is broken, closing session...");
+                    self.close("session error"); return Ok(());
+                }
+            }
             ServerMetaEventFrom::<Channel>::Msg(msg) =>
             {
+                // disconnect client if not fully authenticated yet
+                let Some(client_id) = self.client_id
+                else
+                {
+                    self.close("message before auth"); return Ok(());
+                };
+
                 // try to forward client message to session owner
                 if let Err(err) = self.server_event_sender.send(
-                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Msg(msg))
+                        ClientSourceMsg::new(client_id, ServerEventFrom::<Channel>::Msg(msg))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");
@@ -143,9 +201,16 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
             }
             ServerMetaEventFrom::<Channel>::Request(request, request_id) =>
             {
+                // disconnect client if not fully authenticated yet
+                let Some(client_id) = self.client_id
+                else
+                {
+                    self.close("request before auth"); return Ok(());
+                };
+
                 // prepare token
                 let token = RequestToken::new(
-                        self.id,
+                        client_id,
                         request_id,
                         self.request_rejector.clone(),
                         self.death_signal.clone(),
@@ -153,7 +218,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
 
                 // try to forward client request to session owner
                 if let Err(err) = self.server_event_sender.send(
-                        SessionSourceMsg::new(self.id, ServerEventFrom::<Channel>::Request(token, request))
+                        ClientSourceMsg::new(client_id, ServerEventFrom::<Channel>::Request(token, request))
                     )
                 {
                     tracing::debug!(?err, "client msg sender is broken, closing session...");

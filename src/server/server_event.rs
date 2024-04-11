@@ -51,7 +51,7 @@ pub enum ServerEvent<ConnectMsg: Debug + Clone, ClientMsg: Debug, ClientRequest:
     ///    making any mutations (i.e. in order to synchronize with step 4).
     /// 6) Server sends response to request from step 1, representing the updated server state.
     ///
-    /// The client will *not* receive the response in step 5, because we discard all responses sent for pre-reconnect
+    /// The client will *not* receive the response in step 6, because we discard all responses sent for pre-reconnect
     /// requests. Doing so allows us to promptly notify clients that requests have failed when they disconnect,
     /// which is important for client responsiveness. As a result, any mutations from
     /// step 5 will not be visible to the client. If you use a client-message/server-message pattern then the server

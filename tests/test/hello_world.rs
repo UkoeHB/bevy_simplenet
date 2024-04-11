@@ -74,16 +74,7 @@ fn hello_world()
             "127.0.0.1:0",
             bevy_simplenet::AcceptorConfig::Default,
             bevy_simplenet::Authenticator::None,
-            bevy_simplenet::ServerConfig{
-                max_connections   : 10,
-                max_msg_size      : 1_000,
-                rate_limit_config : bevy_simplenet::RateLimitConfig{
-                        period    : std::time::Duration::from_secs(1),
-                        max_count : 20
-                    },
-                heartbeat_interval : std::time::Duration::from_secs(5),
-                keepalive_timeout  : std::time::Duration::from_secs(10),
-            }
+            bevy_simplenet::ServerConfig::default()
         );
 
     let websocket_url = websocket_server.url();
@@ -147,7 +138,7 @@ fn hello_world()
             code   : ezsockets::CloseCode::Normal,
             reason : String::from("test")
         };
-    websocket_server.close_session(client_id, Some(closure_frame));
+    websocket_server.disconnect_client(client_id, Some(closure_frame));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

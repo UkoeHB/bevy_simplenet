@@ -2,12 +2,10 @@
 use crate::*;
 
 //third-party shortcuts
-use serde::Deserialize;
 
 //standard shortcuts
 use core::fmt::Debug;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,107 +62,6 @@ fn try_extract_client_env<'a>(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn deserialize_authentication<'a>(
-    query_element: &Option<(Cow<str>, Cow<str>)>,
-) -> Result<AuthRequest, &'static str>
-{
-    // extract auth msg
-    let Some((key, value)) = query_element
-    else { tracing::trace!("invalid auth message (not present)"); return Err("Auth message missing."); };
-
-    // check key
-    if key != AUTH_MSG_KEY
-    { tracing::trace!("invalid auth message (not present)"); return Err("Auth message missing."); };
-
-    // deserialize
-    let Ok(auth_request) = serde_json::de::from_str::<AuthRequest>(&value)
-    else { tracing::trace!("invalid auth message (deserialization)"); return Err("Auth message malformed."); };
-
-    Ok(auth_request)
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn validate_authentication<'a>(
-    query_element : Option<(Cow<str>, Cow<str>)>,
-    authenticator : &Authenticator
-) -> Result<(), &'static str>
-{
-    // deserialize
-    let auth_request = deserialize_authentication(&query_element)?;
-
-    // validate
-    if !authenticate(&auth_request, authenticator)
-    { tracing::trace!("invalid auth message (verification)"); return Err("Auth message invalid."); };
-
-    Ok(())
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn try_extract_client_id<'a>(
-    query_element: Option<(Cow<str>, Cow<str>)>,
-) -> Result<u128, &'static str>
-{
-    let auth_request = deserialize_authentication(&query_element)?;
-    Ok(auth_request.client_id())
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn check_connect_message_size<'a>(
-    query_element : Option<(Cow<str>, Cow<str>)>,
-    max_msg_size  : u32
-) -> Result<(), &'static str>
-{
-    // extract connect msg
-    let Some((key, value)) = query_element
-    else { tracing::trace!("invalid connect message (not present)"); return Err("Connect message missing."); };
-
-    // check key
-    if key != CONNECT_MSG_KEY
-    { tracing::trace!("invalid connect message (not present)"); return Err("Connect message missing."); };
-
-    // validate size
-    // note: since connect messages are serialized as json, the actual deserialized message will be smaller
-    //       however, we still limit connect msg sizes to 'max msg size' since the goal is constraining byte-throughput
-    //       at the network layer
-    if value.len() > max_msg_size as usize
-    { tracing::trace!("invalid connect message (too large)"); return Err("Connect message too large."); };
-
-    Ok(())
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn try_extract_connect_msg<'a, ConnectMsg>(
-    query_element : Option<(Cow<str>, Cow<str>)>,
-) -> Result<ConnectMsg, &'static str>
-where
-    ConnectMsg: for<'de> Deserialize<'de> + 'static,
-{
-    // extract connect msg
-    let Some((key, value)) = query_element
-    else { tracing::trace!("invalid connect message (not present)"); return Err("Connect message missing."); };
-
-    // check key
-    if key != CONNECT_MSG_KEY
-    { tracing::trace!("invalid connect message (not present)"); return Err("Connect message missing."); };
-
-    // deserialize
-    let Ok(connect_msg) = serde_json::de::from_str::<ConnectMsg>(&value)
-    else { tracing::trace!("invalid connect message (deserialization)"); return Err("Connect message malformed."); };
-
-    Ok(connect_msg)
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
 #[derive(Debug, Clone)]
 pub(crate) struct ConnectionCounter
 {
@@ -197,13 +94,44 @@ impl Default for ConnectionCounter { fn default() -> Self { Self{ counter: Arc::
 
 //-------------------------------------------------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
+pub(crate) struct PendingCounter
+{
+    counter: Arc<AtomicU64>,
+}
+
+impl PendingCounter
+{
+    pub(crate) fn load(&self) -> u64
+    {
+        self.counter.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn increment(&self)
+    {
+        self.counter.fetch_add(1u64, Ordering::Release);
+    }
+
+    pub(crate) fn decrement(&self)
+    {
+        // negate the decrement if we go below zero
+        if self.counter.fetch_sub(1u64, Ordering::Release) == u64::MAX
+        {
+            self.increment();
+        }
+    }
+}
+
+impl Default for PendingCounter { fn default() -> Self { Self{ counter: Arc::new(AtomicU64::new(0u64)) } } }
+
+//-------------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug)]
 pub(crate) struct ConnectionPrevalidator
 {
     pub(crate) protocol_version   : &'static str,
-    pub(crate) authenticator      : Authenticator,
+    pub(crate) max_pending        : u32,
     pub(crate) max_connections    : u32,
-    pub(crate) max_msg_size       : u32,
     pub(crate) heartbeat_interval : Duration,
     pub(crate) keepalive_timeout  : Duration,
 }
@@ -212,17 +140,23 @@ pub(crate) struct ConnectionPrevalidator
 
 pub(crate) fn prevalidate_connection_request(
     request         : &ezsockets::Request,
+    num_pending     : &PendingCounter,
     num_connections : &ConnectionCounter,
     prevalidator    : &ConnectionPrevalidator,
 ) -> Result<EnvType, (axum::http::StatusCode, &'static str)>
 {
-    // check max connection count
-    // - this is an approximate test since the counter is updated async
+    // check max connection counts
+    // - this is an approximate test since the counters are updated async
+    if num_pending.load() >= prevalidator.max_pending as u64
+    {
+        tracing::trace!("max pending connections reached, dropping request...");
+        return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Max pending connections."));
+    }
     if num_connections.load() >= prevalidator.max_connections as u64
     {
         tracing::trace!("max connections reached, dropping request...");
-        return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Max connections reached."));
-    };
+        return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Max connections."));
+    }
 
     // parse request query
     let Some(query) = request.uri().query()
@@ -241,15 +175,6 @@ pub(crate) fn prevalidate_connection_request(
     let client_env_type = try_extract_client_env(query_elements_iterator.next())
         .map_err(|reason| (axum::http::StatusCode::BAD_REQUEST, reason))?;
 
-    // validate authentication
-    validate_authentication(query_elements_iterator.next(), &prevalidator.authenticator)
-        .map_err(|reason| (axum::http::StatusCode::BAD_REQUEST, reason))?;
-
-    // validate size of connect message
-    // - don't check if deserializable (too expensive for valid connections)
-    check_connect_message_size(query_elements_iterator.next(), prevalidator.max_msg_size)
-        .map_err(|reason| (axum::http::StatusCode::BAD_REQUEST, reason))?;
-
     // there should be no more query elements
     let None = query_elements_iterator.next()
     else { return Err((axum::http::StatusCode::PAYLOAD_TOO_LARGE, "Excess query elements.")); };
@@ -260,11 +185,9 @@ pub(crate) fn prevalidate_connection_request(
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub(crate) struct ConnectionInfo<ConnectMsg>
+pub(crate) struct ConnectionInfo
 {
-    pub(crate) client_env_type : EnvType,
-    pub(crate) id              : u128,
-    pub(crate) connect_msg     : ConnectMsg,
+    pub(crate) client_env_type: EnvType,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -272,12 +195,9 @@ pub(crate) struct ConnectionInfo<ConnectMsg>
 /// Extract connection info from a connection request.
 ///
 /// Assumes the request has already been pre-validated.
-pub(crate) fn extract_connection_info<ConnectMsg>(
-    request          : &ezsockets::Request,
-    session_registry : &HashMap<SessionId, (u64, ezsockets::Session<SessionId, ()>)>,
-) -> Result<ConnectionInfo<ConnectMsg>, Option<ezsockets::CloseFrame>>
-where
-    ConnectMsg: for<'de> Deserialize<'de> + 'static,
+pub(crate) fn extract_connection_info(
+    request: &ezsockets::Request,
+) -> Result<ConnectionInfo, Option<ezsockets::CloseFrame>>
 {
     // parse request query
     let query = request.uri().query().ok_or(None)?;
@@ -289,34 +209,7 @@ where
     // get client's implementation type
     let client_env_type = try_extract_client_env(query_elements_iterator.next()).map_err(|_| None)?;
 
-    // try to get client id
-    let id = try_extract_client_id(query_elements_iterator.next()).map_err(|_| None)?;
-
-    // reject connection if client id is already registered as a session
-    if session_registry.contains_key(&id)
-    {
-        tracing::trace!(id, "received connection request from already-connected client");
-        return Err(Some(ezsockets::CloseFrame{
-                code   : ezsockets::CloseCode::Protocol,
-                reason : String::from("Client is already connected.")
-            }));
-    }
-
-    // try to extract connect message
-    let connect_msg = try_extract_connect_msg(query_elements_iterator.next())
-        .map_err(
-            |reason|
-            Some(ezsockets::CloseFrame{
-                code   : ezsockets::CloseCode::Protocol,
-                reason : String::from(reason)
-            })
-        )?;
-
-    Ok(ConnectionInfo{
-            client_env_type,
-            id,
-            connect_msg,
-        })
+    Ok(ConnectionInfo{ client_env_type, })
 }
 
 //-------------------------------------------------------------------------------------------------------------------

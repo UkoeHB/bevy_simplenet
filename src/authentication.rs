@@ -50,7 +50,6 @@ pub struct AuthToken
     //todo
     //- prefix = sign[auth key](expiry, client key)
     //- verification = sign[client key](prefix)
-    //todo: should sign entire connection http request?
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -69,6 +68,29 @@ pub enum Authenticator
         //todo
         //- auth pubkey
     },
+}
+
+impl Authenticator
+{
+    /// Authenticates an auth request.
+    pub fn authenticate(&self, request: &AuthRequest) -> bool
+    {
+        match self
+        {
+            Authenticator::None =>
+            {
+                return authenticate_none(request);
+            }
+            Authenticator::Secret{secret} =>
+            {
+                return authenticate_secret(request, secret);
+            }
+            Authenticator::Token{} =>
+            {
+                return authenticate_token(request);
+            }
+        }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -108,28 +130,6 @@ impl AuthRequest
             AuthRequest::None{client_id}              => *client_id,
             AuthRequest::Secret{client_id, secret: _} => *client_id,
             AuthRequest::Token{token}                 => token.client_id,
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Authenticates an auth request.
-pub fn authenticate(request: &AuthRequest, authenticator: &Authenticator) -> bool
-{
-    match authenticator
-    {
-        Authenticator::None =>
-        {
-            return authenticate_none(request);
-        }
-        Authenticator::Secret{secret} =>
-        {
-            return authenticate_secret(request, secret);
-        }
-        Authenticator::Token{} =>
-        {
-            return authenticate_token(request);
         }
     }
 }

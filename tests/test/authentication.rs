@@ -60,18 +60,9 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
     let websocket_server = server_demo_factory().new_server(
             server_runtime,
             "127.0.0.1:0",
-            bevy_simplenet::AcceptorConfig::Default,
+            bevy_simplenet::AcceptorConfig::default(),
             authenticator,
-            bevy_simplenet::ServerConfig{
-                max_connections   : 10,
-                max_msg_size      : 10_000,
-                rate_limit_config : bevy_simplenet::RateLimitConfig{
-                        period    : std::time::Duration::from_millis(15),
-                        max_count : 25
-                    },
-                heartbeat_interval : std::time::Duration::from_secs(5),
-                keepalive_timeout  : std::time::Duration::from_secs(10),
-            }
+            bevy_simplenet::ServerConfig::default(),
         );
 
     // make client
@@ -86,7 +77,7 @@ fn authentication_test(authenticator: bevy_simplenet::Authenticator, auth_reques
             DemoConnectMsg(String::from("hello"))
         );
 
-    std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
+    std::thread::sleep(std::time::Duration::from_millis(50));  //wait for async machinery
 
     // return connection result
     return !websocket_client.is_dead();

@@ -387,7 +387,7 @@ fn request_dropped()
             code   : ezsockets::CloseCode::Normal,
             reason : String::from("test")
         };
-    websocket_server.close_session(client_id, Some(closure_frame));
+    websocket_server.disconnect_client(client_id, Some(closure_frame));
 
     std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
 

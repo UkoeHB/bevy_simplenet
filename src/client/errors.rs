@@ -11,7 +11,7 @@ use core::fmt::Debug;
 #[derive(Debug)]
 pub enum ClientError
 {
-    //ClosedByServer,
+    ConnectError,
     SendError
 }
 
@@ -22,8 +22,8 @@ impl std::fmt::Display for ClientError
         let _ = write!(f, "ClientError::");
         match self
         {
-            //ClientError::ClosedByServer => write!(f, "ClosedByServer"),
-            ClientError::SendError      => write!(f, "SendError"),
+            ClientError::ConnectError => write!(f, "ConnectError"),
+            ClientError::SendError    => write!(f, "SendError"),
         }
     }
 }

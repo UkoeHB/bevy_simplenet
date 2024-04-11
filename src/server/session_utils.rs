@@ -10,30 +10,30 @@ use core::fmt::Debug;
 
 /// Message targeted at a session.
 #[derive(Debug)]
-pub(crate) struct SessionTargetMsg<I, T>
+pub(crate) struct ClientTargetMsg<I, T>
 {
     pub(crate) id  : I,
     pub(crate) msg : T
 }
 
-impl<I, T> SessionTargetMsg<I, T>
+impl<I, T> ClientTargetMsg<I, T>
 {
-    pub(crate) fn new(id: I, msg: T) -> SessionTargetMsg<I, T> { SessionTargetMsg::<I, T> { id, msg } }
+    pub(crate) fn new(id: I, msg: T) -> ClientTargetMsg<I, T> { ClientTargetMsg::<I, T> { id, msg } }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Message sourced from a session.
 #[derive(Debug)]
-pub(crate) struct SessionSourceMsg<I, T>
+pub(crate) struct ClientSourceMsg<I, T>
 {
     pub(crate) id  : I,
     pub(crate) msg : T
 }
 
-impl<I, T> SessionSourceMsg<I, T>
+impl<I, T> ClientSourceMsg<I, T>
 {
-    pub(crate) fn new(id: I, msg: T) -> SessionSourceMsg<I, T> { SessionSourceMsg::<I, T> { id, msg } }
+    pub(crate) fn new(id: I, msg: T) -> ClientSourceMsg<I, T> { ClientSourceMsg::<I, T> { id, msg } }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -42,6 +42,12 @@ impl<I, T> SessionSourceMsg<I, T>
 #[derive(Debug, Clone)]
 pub(crate) enum SessionCommand<Channel: ChannelPack>
 {
+    /// Adds a newly authenticated session to the internal session registry.
+    Add {
+        session_id: SessionId,
+        msg: Channel::ConnectMsg,
+        env_type: EnvType,
+    },
     /// Send a client meta event.
     ///
     /// Includes an optional 'connection events consumed counter' for use in synchronizing message sends with

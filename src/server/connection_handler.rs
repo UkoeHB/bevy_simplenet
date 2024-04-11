@@ -3,6 +3,7 @@ use crate::*;
 
 //third-party shortcuts
 use bincode::Options;
+use enfync::{Handle, TryAdopt};
 
 //standard shortcuts
 use core::fmt::Debug;
@@ -39,26 +40,47 @@ fn reject_client_request<Channel: ChannelPack>(
 #[derive(Debug)]
 pub(crate) struct ConnectionHandler<Channel: ChannelPack>
 {
-    /// config: maximum message size (bytes)
+    /// authenticator used to evaluate authentication requests
+    pub(crate) authenticator: Arc<Authenticator>,
+
+    /// config
     pub(crate) config: ServerConfig,
-    /// counter for number of connections
+
+    /// counter for number of pending connections
+    ///
+    /// Includes both pending and fully-connected clients.
+    pub(crate) pending_counter: PendingCounter,
+    /// counter for number of authenticated connections
     pub(crate) connection_counter: ConnectionCounter,
-    /// counter for total number of connections encountered
+    /// counter for assigning session ids
+    pub(crate) session_counter: u64,
+    /// counter for total number of authenticated connections encountered
     pub(crate) total_connections_count: u64,
 
     /// registered sessions
-    pub(crate) session_registry: HashMap<SessionId, (u64, ezsockets::Session<SessionId, ()>)>,
+    pub(crate) session_registry: HashMap<SessionId, ezsockets::Session<SessionId, ()>>,
 
+    /// session id to client id maps
+    ///
+    /// The client-session map includes the connection count for each session, which is used to synchronize with
+    /// connection events.
+    pub(crate) client_to_session: HashMap<ClientId, (SessionId, u64)>,
+    pub(crate) session_to_client: HashMap<SessionId, ClientId>,
+
+    /// Sends client events to the internal connection handler.
+    pub(crate) client_event_sender: tokio::sync::mpsc::UnboundedSender<
+        ClientTargetMsg<ClientId, SessionCommand<Channel>>
+    >,
     /// cached sender endpoint for constructing new sessions
     /// - receiver is in server owner
-    pub(crate) server_event_sender: crossbeam::channel::Sender<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>,
+    pub(crate) server_event_sender: crossbeam::channel::Sender<ClientSourceMsg<ClientId, ServerEventFrom<Channel>>>,
 }
 
 #[async_trait::async_trait]
 impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 {
     type Session = SessionHandler<Channel>;  //Self::Session, not ezsockets::Session
-    type Call    = SessionTargetMsg<SessionId, SessionCommand<Channel>>;
+    type Call    = ClientTargetMsg<ClientId, SessionCommand<Channel>>;
 
     /// Produces server sessions for new connections.
     async fn on_connect(
@@ -69,41 +91,30 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     ) -> Result<ezsockets::Session<SessionId, ()>, Option<ezsockets::CloseFrame>>
     {
         // reject connection if max connections reached
-        if self.session_registry.len() >= self.config.max_connections as usize
+        if self.session_registry.len() >= (self.config.max_connections + self.config.max_pending) as usize
         {
             tracing::trace!("max connections reached, dropping connection request...");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Protocol,
-                    reason : String::from("Max connections reached.")
+                    reason : String::from("max connections")
                 }));
         }
 
         // extract info from the request
-        let info = extract_connection_info(&request, &self.session_registry)?;
+        let info = extract_connection_info(&request)?;
 
-        // report the new connection
-        let report = ServerReport::<Channel::ConnectMsg>::Connected(info.client_env_type, info.connect_msg);
-        if let Err(err) = self.server_event_sender.send(
-                SessionSourceMsg::new(info.id, ServerEventFrom::<Channel>::Report(report))
-            )
-        {
-            // This is not an error if the connect was received when shutting down the server.
-            tracing::warn!(?err, "forwarding connection report failed");
-            return Err(Some(ezsockets::CloseFrame{
-                    code   : ezsockets::CloseCode::Error,
-                    reason : String::from("Server internal error.")
-                }));
-        };
-
-        // increment the connection counter now so the updated value is available asap
-        self.connection_counter.increment();
-        self.total_connections_count += 1;
+        // increment the pending counter
+        self.pending_counter.increment();
+        self.session_counter = self.session_counter.checked_add(1).expect("ran out of session ids");
+        let session_id = self.session_counter;
 
         // make a session
-        let session_id        = info.id;
+        let authenticator       = self.authenticator.clone();
+        let client_event_sender = self.client_event_sender.clone();
         let server_event_sender = self.server_event_sender.clone();
-        let max_msg_size      = self.config.max_msg_size;
-        let rate_limit_config = self.config.rate_limit_config.clone();
+        let max_msg_size        = self.config.max_msg_size;
+        let rate_limit_config   = self.config.rate_limit_config.clone();
+        let (auth_signal_sender, mut auth_signal_receiver) = tokio::sync::mpsc::channel(1);
 
         let session = ezsockets::Session::create(
                 move |session|
@@ -118,11 +129,15 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
 
                     // make session handler
                     SessionHandler::<Channel>{
+                            authenticator,
                             id: session_id,
+                            client_id: None,
                             session,
+                            auth_signal_sender,
+                            client_event_sender,
                             server_event_sender,
                             max_msg_size,
-                            client_env_type: info.client_env_type,
+                            env_type: info.client_env_type,
                             rate_limit_tracker: RateLimitTracker::new(rate_limit_config),
                             request_rejector: Arc::new(request_rejector),
                             death_signal: Arc::new(AtomicBool::new(false)),
@@ -132,8 +147,33 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 socket
             );
 
-        // register the session
-        self.session_registry.insert(info.id, (self.total_connections_count, session.clone()));
+        // wait for the session to become fully authenticated, and if doesn't then close it
+        let handle = enfync::builtin::native::TokioHandle::try_adopt().unwrap();
+        let auth_timeout = self.config.auth_timeout;
+        let session_clone = session.clone();
+
+        handle.spawn(
+                async move {
+                    tokio::select! {
+                        biased; // Successful auth takes priority.
+                        _ = auth_signal_receiver.recv() => return,
+                        _ = tokio::time::sleep(auth_timeout) =>
+                        {
+                            // Tell the session to close itself.
+                            let _ = session_clone.close(Some(
+                                    ezsockets::CloseFrame
+                                    {
+                                        code   : ezsockets::CloseCode::Policy,
+                                        reason : String::from("no auth received")
+                                    }
+                                ));
+                        }
+                    }
+                }
+            );
+
+        // save session in registry while it's waiting to be authenticated
+        self.session_registry.insert(session_id, session.clone());
 
         Ok(session)
     }
@@ -147,13 +187,23 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     {
         // unregister session
         tracing::info!(id, "unregistering session");
-        self.connection_counter.decrement();
         self.session_registry.remove(&id);
+
+        // clean up session/client id maps
+        let Some(client_id) = self.session_to_client.remove(&id)
+        else
+        {
+            self.pending_counter.decrement();
+            tracing::debug!(id, "disconnecting unathenticated session");
+            return Ok(());
+        };
+        self.connection_counter.decrement();
+        let _ = self.client_to_session.remove(&client_id);
 
         // send disconnect report
         let report = ServerReport::<Channel::ConnectMsg>::Disconnected;
         if let Err(err) = self.server_event_sender.send(
-                SessionSourceMsg::new(id, ServerEventFrom::<Channel>::Report(report))
+                ClientSourceMsg::new(client_id, ServerEventFrom::<Channel>::Report(report))
             )
         {
             // This is not an error if the disconnect was received when shutting down the server.
@@ -167,19 +217,78 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
     /// Responds to calls to the server connected to this handler (i.e. ezsockets::Server::call()).
     async fn on_call(
         &mut self,
-        session_msg: SessionTargetMsg<SessionId, SessionCommand<Channel>>
+        client_msg: ClientTargetMsg<ClientId, SessionCommand<Channel>>
     ) -> Result<(), ezsockets::Error>
     {
+        // handle newly authenticated clients
+        // - We overload ClientTargetMsg for this due to the limited API surface.
+        if let SessionCommand::<Channel>::Add{ session_id, msg, env_type } = client_msg.msg
+        {
+            let Some(session) = self.session_registry.get(&session_id)
+            else
+            {
+                // Not an error since the client may have disconnected while this message was in transit.
+                tracing::debug!(session_id, "ignoring authentication from unknown session");
+                return Ok(());
+            };
+
+            // check if the client already exists
+            if self.client_to_session.contains_key(&client_msg.id)
+            {
+                let _ = session.close(Some(
+                    ezsockets::CloseFrame
+                    {
+                        code   : ezsockets::CloseCode::Policy,
+                        reason : String::from("client already connected")
+                    }
+                ));
+
+                return Ok(());
+            }
+
+            // add client to connected
+            self.pending_counter.decrement();
+            self.connection_counter.increment();
+            self.total_connections_count += 1;
+
+            self.client_to_session.insert(client_msg.id, (session_id, self.total_connections_count));
+            self.session_to_client.insert(session_id, client_msg.id);
+
+            // report the connection
+            let report = ServerReport::Connected(env_type, msg);
+            if let Err(err) = self.server_event_sender.send(
+                    ClientSourceMsg::new(client_msg.id, ServerEvent::Report(report))
+                )
+            {
+                tracing::debug!(?err, "client msg sender is broken, closing session...");
+                let _ = session.close(Some(
+                    ezsockets::CloseFrame
+                    {
+                        code   : ezsockets::CloseCode::Away,
+                        reason : String::default(),
+                    }
+                ));
+            };
+
+            return Ok(())
+        }
+
         // try to get targeted session (ignore if missing)
-        let Some((connection_idx, session)) = self.session_registry.get(&session_msg.id)
+        let Some((session_id, connection_idx)) = self.client_to_session.get(&client_msg.id)
         else
         {
-            tracing::debug!(session_msg.id, "dropping message sent to unknown session");
+            tracing::debug!(client_msg.id, "dropping message sent to unknown client");
+            return Ok(());
+        };
+        let Some(session) = self.session_registry.get(session_id)
+        else
+        {
+            tracing::debug!(client_msg.id, "dropping message sent to unknown session");
             return Ok(());
         };
 
         // handle input
-        match session_msg.msg
+        match client_msg.msg
         {
             //todo: consider marshalling the message into the session via Session::call() so the session's
             //      thread can do serializing instead of the connection handler which is a bottleneck
@@ -202,27 +311,28 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 if let Some(death_signal) = maybe_death_signal
                 {
                     if death_signal.is_dead()
-                    { tracing::debug!(session_msg.id, "dropping response targeted at dead session"); return Ok(()); }
+                    { tracing::debug!(client_msg.id, "dropping response targeted at dead session"); return Ok(()); }
                 }
 
                 // serialize message
-                tracing::trace!(session_msg.id, "sending message to session");
+                tracing::trace!(client_msg.id, "sending message to client");
                 let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&msg_to_send)
-                else { tracing::error!(session_msg.id, "serializing message failed"); return Ok(()); };
+                else { tracing::error!(client_msg.id, "serializing message failed"); return Ok(()); };
 
                 // forward server message to target session
                 // - this may fail if the session is disconnected
                 if let Err(_) = session.binary(ser_msg)
-                { tracing::debug!(session_msg.id, "dropping message sent to broken session"); }
+                { tracing::debug!(client_msg.id, "dropping message sent to broken session"); }
             }
             SessionCommand::<Channel>::Close(close_frame) =>
             {
                 // command the target session to close
                 // - this may fail if the session is disconnected
-                tracing::info!(session_msg.id, "closing session");
+                tracing::info!(client_msg.id, "closing session");
                 if let Err(_) = session.close(close_frame)
-                { tracing::debug!(session_msg.id, "failed closing session"); }
+                { tracing::debug!(client_msg.id, "failed closing session"); }
             }
+            _ => unreachable!(),
         }
 
         Ok(())

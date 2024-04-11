@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0]
+
+### Fixed
+
+- The server/client authentication handshake is now done within the websocket channel instead of using the HTTP request. This avoids leaking auth requests when using TLS (they will still be leaked without TLS).
+
+
 ## [0.9.2]
 
 ### Added

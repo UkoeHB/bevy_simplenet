@@ -64,14 +64,8 @@ fn message_size_limit_test(max_msg_size: u32)
             bevy_simplenet::AcceptorConfig::Default,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ServerConfig{
-                max_connections   : 10,
                 max_msg_size,
-                rate_limit_config : bevy_simplenet::RateLimitConfig{
-                        period    : std::time::Duration::from_millis(15),
-                        max_count : 25
-                    },
-                heartbeat_interval : std::time::Duration::from_secs(5),
-                keepalive_timeout  : std::time::Duration::from_secs(10),
+                ..Default::default()
             }
         );
 
@@ -99,9 +93,13 @@ fn message_size_limit_test(max_msg_size: u32)
             large_connect_msg
         );
 
-    std::thread::sleep(std::time::Duration::from_millis(25));  //wait for async machinery
+    std::thread::sleep(std::time::Duration::from_millis(50));  //wait for async machinery
 
     assert!(websocket_client.is_dead());  //failed to connect
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::Connected)) = websocket_client.next()
+    else { panic!("client should have connected"); };
+    let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::ClosedByServer(_))) = websocket_client.next()
+    else { panic!("client should be closed by server"); };
     let Some(DemoClientEvent::Report(bevy_simplenet::ClientReport::IsDead(_))) = websocket_client.next()
     else { panic!("client should be closed by server"); };
     assert_eq!(websocket_server.num_connections(), 0u64);
@@ -162,6 +160,14 @@ fn message_size_limit_test(max_msg_size: u32)
 #[test]
 fn message_size_limit()
 {
+    /*
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(tracing::Level::TRACE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    tracing::info!("ws hello world test: start");
+    */
+
     message_size_limit_test(25);
     message_size_limit_test(40);
     message_size_limit_test(100);

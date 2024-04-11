@@ -17,6 +17,8 @@ pub(crate) struct ClientHandler<Channel: ChannelPack>
 {
     /// config
     pub(crate) config: ClientConfig,
+    /// authentication message
+    pub(crate) auth: ClientAuthMsg<Channel::ConnectMsg>,
     /// core websockets client
     pub(crate) client: ezsockets::Client<ClientHandler<Channel>>,
     /// send client events to the client
@@ -193,6 +195,21 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
                 return Err(Box::new(ClientError::SendError));
             }
         }
+
+        // send client authentication
+        // - This must be done *after* connecting so the auth token is sent over a secure channel. It would be nice to
+        //   send it in the initial HTTP request, but that would allow network observers to steal the auth details and
+        //   initial connection message.
+        // - Sending this within the `pending_requests` lock ensures it is always the first message to be received on
+        //   the server.
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ServerMetaEventFrom::<Channel>::Authenticate(self.auth.clone()))
+        else
+        {
+            tracing::error!("failed serializing client connection request");
+            return Err(Box::new(ClientError::SendError));
+        };
+
+        let _ = self.client.binary(ser_msg);
 
         // forward connection event to client owner
         if let Err(err) = self.client_event_sender.send(ClientEventFrom::<Channel>::Report(ClientReport::Connected))

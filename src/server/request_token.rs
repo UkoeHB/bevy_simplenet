@@ -43,7 +43,7 @@ impl std::fmt::Debug for RequestRejectorFnT
 /// see their request status change to [`RequestStatus::ResponseLost`].
 pub struct RequestToken
 {
-    client_id    : SessionId,
+    client_id    : ClientId,
     request_id   : u64,
     rejector     : Option<Arc<dyn RequestRejectorFn>>,
     death_signal : Option<SessionDeathSignal>,
@@ -53,7 +53,7 @@ impl RequestToken
 {
     /// New token.
     pub(crate) fn new(
-        client_id    : SessionId,
+        client_id    : ClientId,
         request_id   : u64,
         rejector     : Arc<dyn RequestRejectorFn>,
         death_signal : Arc<AtomicBool>
@@ -68,7 +68,7 @@ impl RequestToken
     }
 
     /// The id of the client that sent this request.
-    pub fn client_id(&self) -> SessionId
+    pub fn client_id(&self) -> ClientId
     {
         self.client_id
     }

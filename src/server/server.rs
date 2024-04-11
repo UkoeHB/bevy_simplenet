@@ -44,14 +44,15 @@ fn socket_config(prevalidator: &ConnectionPrevalidator, client_env_type: EnvType
 //-------------------------------------------------------------------------------------------------------------------
 
 async fn websocket_handler<Channel: ChannelPack>(
-    axum::Extension(server) : axum::Extension<ezsockets::Server<ConnectionHandler<Channel>>>,
-    axum::Extension(count)  : axum::Extension<ConnectionCounter>,
-    axum::Extension(preval) : axum::Extension<Arc<ConnectionPrevalidator>>,
-    ezsocket_upgrade        : ezsockets::axum::Upgrade,
+    axum::Extension(server)  : axum::Extension<ezsockets::Server<ConnectionHandler<Channel>>>,
+    axum::Extension(pending) : axum::Extension<PendingCounter>,
+    axum::Extension(count)   : axum::Extension<ConnectionCounter>,
+    axum::Extension(preval)  : axum::Extension<Arc<ConnectionPrevalidator>>,
+    ezsocket_upgrade         : ezsockets::axum::Upgrade,
 ) -> impl axum::response::IntoResponse
 {
     // prevalidate then prepare upgrade
-    match prevalidate_connection_request(ezsocket_upgrade.request(), &count, &preval)
+    match prevalidate_connection_request(ezsocket_upgrade.request(), &pending, &count, &preval)
     {
         Ok(client_env_type) => ezsocket_upgrade.on_upgrade_with_config(server, socket_config(&preval, client_env_type)),
         Err(err) => err.into_response()
@@ -106,10 +107,10 @@ pub struct Server<Channel: ChannelPack>
 
     /// Sends client events to the internal connection handler.
     client_event_sender: tokio::sync::mpsc::UnboundedSender<
-        SessionTargetMsg<SessionId, SessionCommand<Channel>>
+        ClientTargetMsg<ClientId, SessionCommand<Channel>>
     >,
     /// Receives server events from the internal connection handler.
-    server_event_receiver: crossbeam::channel::Receiver<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>,
+    server_event_receiver: crossbeam::channel::Receiver<ClientSourceMsg<ClientId, ServerEventFrom<Channel>>>,
 
     /// A signal that indicates if the server's internal worker has stopped.
     server_closed_signal: enfync::PendingResult<()>,
@@ -119,20 +120,20 @@ pub struct Server<Channel: ChannelPack>
 
 impl<Channel: ChannelPack> Server<Channel>
 {
-    /// Sends a message to the target session.
+    /// Sends a message to the target client.
     ///
     /// Messages will be silently dropped if the client is not connected *or* if the
     /// client is connected but there are unconsumed connection reports for that client.
-    pub fn send(&self, id: SessionId, msg: Channel::ServerMsg)
+    pub fn send(&self, id: ClientId, msg: Channel::ServerMsg)
     {
-        if self.is_dead() { tracing::warn!(id, "tried to send message to session but server is dead"); return; }
+        if self.is_dead() { tracing::warn!(id, "tried to send message to client but server is dead"); return; }
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         if let Err(err) = self.client_event_sender.send(
-                SessionTargetMsg::new(
+                ClientTargetMsg::new(
                     id,
                     SessionCommand::<Channel>::Send(
-                        ClientMetaEventFrom::<Channel>::Msg(msg),
+                        ClientMetaEvent::Msg(msg),
                         Some(self.consumed_connection_events),
                         None
                     )
@@ -170,10 +171,10 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         let (request_id, death_signal) = token.take();
-        if let Err(err) = self.client_event_sender.send(SessionTargetMsg::new(
+        if let Err(err) = self.client_event_sender.send(ClientTargetMsg::new(
                 client_id,
                 SessionCommand::<Channel>::Send(
-                    ClientMetaEventFrom::<Channel>::Response(response, request_id),
+                    ClientMetaEvent::Response(response, request_id),
                     None,
                     Some(death_signal)
                 )
@@ -212,9 +213,9 @@ impl<Channel: ChannelPack> Server<Channel>
 
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         let (request_id, death_signal) = token.take();
-        if let Err(err) = self.client_event_sender.send(SessionTargetMsg::new(
+        if let Err(err) = self.client_event_sender.send(ClientTargetMsg::new(
                 client_id,
-                SessionCommand::<Channel>::Send(ClientMetaEventFrom::<Channel>::Ack(request_id), None, Some(death_signal))
+                SessionCommand::<Channel>::Send(ClientMetaEvent::Ack(request_id), None, Some(death_signal))
             ))
         {
             tracing::error!(?err, "failed to forward ack to session");
@@ -228,10 +229,10 @@ impl<Channel: ChannelPack> Server<Channel>
         // drop the token: rejection will happen automatically using the token's custom Drop
     }
 
-    /// Closes the target session.
+    /// Disconnects the target client.
     ///
-    /// The target session may remain open until some time after this method is called.
-    pub fn close_session(&self, id: SessionId, close_frame: Option<ezsockets::CloseFrame>)
+    /// The client's session may remain open until some time after this method is called.
+    pub fn disconnect_client(&self, id: ClientId, close_frame: Option<ezsockets::CloseFrame>)
     {
         // send to endpoint of ezsockets::Server::call() (will be picked up by ConnectionHandler::on_call())
         tracing::info!(id, "closing client");
@@ -241,7 +242,7 @@ impl<Channel: ChannelPack> Server<Channel>
             return;
         }
         if let Err(err) = self.client_event_sender.send(
-                SessionTargetMsg::new(id, SessionCommand::<Channel>::Close(close_frame))
+                ClientTargetMsg::new(id, SessionCommand::<Channel>::Close(close_frame))
             )
         {
             tracing::error!(?err, "failed to forward session close command to session");
@@ -250,9 +251,9 @@ impl<Channel: ChannelPack> Server<Channel>
     }
 
     /// Gets the next available server event.
-    pub fn next(&mut self) -> Option<(SessionId, ServerEventFrom<Channel>)>
+    pub fn next(&mut self) -> Option<(ClientId, ServerEventFrom<Channel>)>
     {
-        let Ok(SessionSourceMsg{ id, msg }) = self.server_event_receiver.try_recv() else { return None; };
+        let Ok(ClientSourceMsg{ id, msg }) = self.server_event_receiver.try_recv() else { return None; };
 
         // count the number of connection events received
         if let ServerEventFrom::<Channel>::Report(ServerReport::Connected(_, _)) = &msg
@@ -320,25 +321,33 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
         let (
                 server_event_sender,
                 server_event_receiver
-            ) = crossbeam::channel::unbounded::<SessionSourceMsg<SessionId, ServerEventFrom<Channel>>>();
+            ) = crossbeam::channel::unbounded::<ClientSourceMsg<ClientId, ServerEventFrom<Channel>>>();
 
-        // prepare connection counter
+        // prepare connection counters
         // - this is used to communication the current number of connections from the connection handler to the
         //   connection prevalidator
+        let pending_counter    = PendingCounter::default();
         let connection_counter = ConnectionCounter::default();
 
         // make server core with our connection handler
         // note: ezsockets::Server::create() must be called from within a tokio runtime
+        let pending_counter_clone    = pending_counter.clone();
         let connection_counter_clone = connection_counter.clone();
 
         let (server, server_worker) = enfync::blocking::extract(runtime_handle.spawn(async move {
                 ezsockets::Server::create(
-                        move |_server|
+                        move |server|
                         ConnectionHandler::<Channel>{
+                                authenticator           : Arc::new(authenticator),
                                 config,
+                                pending_counter         : pending_counter_clone,
                                 connection_counter      : connection_counter_clone,
+                                session_counter         : 0u64,
                                 total_connections_count : 0u64,
                                 session_registry        : HashMap::default(),
+                                client_to_session       : HashMap::default(),
+                                session_to_client       : HashMap::default(),
+                                client_event_sender     : server.into(),
                                 server_event_sender,
                             }
                     )
@@ -356,9 +365,8 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
         // prepare prevalidator
         let prevalidator = ConnectionPrevalidator{
                 protocol_version   : self.protocol_version,
-                authenticator,
+                max_pending        : config.max_pending,
                 max_connections    : config.max_connections,
-                max_msg_size       : config.max_msg_size,
                 heartbeat_interval : config.heartbeat_interval,
                 keepalive_timeout  : config.keepalive_timeout,
             };
@@ -368,6 +376,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
             .route("/ws", axum::routing::get(websocket_handler::<Channel>))
             .layer(axum::Extension(server.clone()))
             .layer(axum::Extension(Arc::new(prevalidator)))
+            .layer(axum::Extension(pending_counter.clone()))
             .layer(axum::Extension(connection_counter.clone()));
 
         // prepare listener

@@ -50,11 +50,19 @@ impl<Channel: ChannelPack> Client<Channel>
     ///
     /// Returns `Ok(MessageSignal)` on success. The signal can be used to track the message status. Messages
     /// will fail if the underlying client becomes disconnected.
-    ///
-    /// Returns `Err` if the client is not connected.
     pub fn send(&self, msg: Channel::ClientMsg) -> MessageSignal
     {
+        // lock pending requests
+        let Ok(_pending_requests) = self.pending_requests.lock()
+        else
+        {
+            tracing::error!("the client experienced a critical internal error");
+            return MessageSignal::new(MessageStatus::Failed);
+        };
+
         // check if connected
+        // - We do this after locking the pending requests cache in order to synchronize with dropping the internal
+        //   client handler, and to synchronize with disconnect events in the client backend.
         if !self.is_connected()
         {
             tracing::warn!("tried to send message to disconnected client");
@@ -155,7 +163,8 @@ impl<Channel: ChannelPack> Client<Channel>
         // If we connected to the server, mark the client as connected.
         // - We do this when consuming the connection report so client messages and requests cannot be sent
         //   when the client has not yet realized it is connected.
-        //   Without this change, it is possible for client messages to be sent based on stale client state.
+        // - Without this, it is possible for client messages to be sent based on client state that is derived from
+        //   an old session. We want client messages to be synchronized with `Connected` events.
         if let ClientEventFrom::<Channel>::Report(ClientReport::Connected) = &msg
         {
             self.client_disconnected_count.fetch_sub(1u16, Ordering::Release);
@@ -274,17 +283,12 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
     {
         // prepare to make client connection
         // note: urls cannot contain raw bytes so we must serialize as json
-        let auth_msg_ser    = serde_json::to_string(&auth).expect("could not serialize authentication");
-        let connect_msg_ser = serde_json::to_string(&connect_msg).expect("could not serialize connect msg");
-
         let client_config = ezsockets::ClientConfig::new(url)
             .reconnect_interval(config.reconnect_interval)
             .max_initial_connect_attempts(config.max_initial_connect_attempts)
             .max_reconnect_attempts(config.max_reconnect_attempts)
             .query_parameter(VERSION_MSG_KEY, self.protocol_version)
-            .query_parameter(TYPE_MSG_KEY, env_type_as_str(env_type()))
-            .query_parameter(AUTH_MSG_KEY, auth_msg_ser.as_str())
-            .query_parameter(CONNECT_MSG_KEY, connect_msg_ser.as_str());
+            .query_parameter(TYPE_MSG_KEY, env_type_as_str(env_type()));
 
         // prepare client's socket config
         let mut socket_config = ezsockets::SocketConfig::default();
@@ -311,6 +315,10 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                 { ezsockets::ClientConnectorWasm::default() }
             };
 
+        // prep auth
+        let client_id = auth.client_id();
+        let auth = ClientAuthMsg{ auth, msg: connect_msg };
+
         // make client core with our handler
         let client_event_sender_clone = client_event_sender.clone();
         let pending_requests = Arc::new(Mutex::new(PendingRequestTracker::default()));
@@ -324,6 +332,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
                 {
                     ClientHandler::<Channel>{
                             config,
+                            auth,
                             client,
                             client_event_sender       : client_event_sender_clone,
                             pending_requests          : pending_requests_clone,
@@ -339,7 +348,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         tracing::info!("created new client");
 
         Client{
-                client_id: auth.client_id(),
+                client_id,
                 client,
                 client_event_sender,
                 client_event_receiver,

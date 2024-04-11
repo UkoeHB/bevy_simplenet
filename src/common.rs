@@ -9,8 +9,8 @@ use std::net::SocketAddr;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Id for client sessions on the server. Equals the client id.
-pub type SessionId = u128;
+/// Client id specified in client [`AuthTokens`](AuthToken).
+pub type ClientId = u128;
 
 //-------------------------------------------------------------------------------------------------------------------
 

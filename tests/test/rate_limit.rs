@@ -64,14 +64,11 @@ fn rate_limit_test(max_count_per_period: u32)
             bevy_simplenet::AcceptorConfig::Default,
             bevy_simplenet::Authenticator::None,
             bevy_simplenet::ServerConfig{
-                max_connections   : 10,
-                max_msg_size      : 1_000,
                 rate_limit_config : bevy_simplenet::RateLimitConfig{
-                        period    : std::time::Duration::from_millis(15),  //15ms to coordinate with async waits
-                        max_count : max_count_per_period
-                    },
-                heartbeat_interval : std::time::Duration::from_secs(5),
-                keepalive_timeout  : std::time::Duration::from_secs(10),
+                    period    : std::time::Duration::from_millis(15),  //15ms to coordinate with async waits
+                    max_count : max_count_per_period
+                },
+                ..Default::default()
             }
         );
 
@@ -192,6 +189,14 @@ fn rate_limit_test(max_count_per_period: u32)
 #[test]
 fn rate_limiter()
 {
+    /*
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(tracing::Level::TRACE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    tracing::info!("ws hello world test: start");
+    */
+
     rate_limit_test(1);
     rate_limit_test(2);
     rate_limit_test(20);
