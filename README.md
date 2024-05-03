@@ -8,7 +8,7 @@ Provides a bi-directional server/client channel implemented over websockets. Thi
 - Clients can be authenticated by the server (WIP).
 - Provides optional server TLS.
 
-Check out the example for a demonstration of how to build a Bevy client using this crate. **NOTE**: The example is currently broken until `bevy_lunex` updates to Bevy v0.13.
+Check out the example for a demonstration of how to build a Bevy client using this crate.
 
 Check out [bevy_simplenet_events](https://github.com/UkoeHB/bevy_simplenet_events) for an event-based framework for networking that builds on this crate.
 

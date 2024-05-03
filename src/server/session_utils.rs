@@ -8,6 +8,11 @@ use core::fmt::Debug;
 
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Id for sessions inside the server.
+pub(crate) type SessionId = u64;
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Message targeted at a session.
 #[derive(Debug)]
 pub(crate) struct ClientTargetMsg<I, T>

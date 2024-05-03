@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1]
+
+### Changed
+
+- Minor cleanup.
+
+
 ## [0.10.0]
 
 ### Fixed

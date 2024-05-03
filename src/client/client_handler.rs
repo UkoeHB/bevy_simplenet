@@ -202,7 +202,9 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         //   initial connection message.
         // - Sending this within the `pending_requests` lock ensures it is always the first message to be received on
         //   the server.
-        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(&ServerMetaEventFrom::<Channel>::Authenticate(self.auth.clone()))
+        let Ok(ser_msg) = bincode::DefaultOptions::new().serialize(
+                &ServerMetaEventFrom::<Channel>::Authenticate(self.auth.clone())
+            )
         else
         {
             tracing::error!("failed serializing client connection request");

@@ -14,11 +14,6 @@ pub(crate) const TYPE_MSG_KEY    : &'static str = "t";
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Id for sessions inside the server.
-pub(crate) type SessionId = u64;
-
-//-------------------------------------------------------------------------------------------------------------------
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct ClientAuthMsg<ConnectMsg>
 {

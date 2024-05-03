@@ -35,9 +35,9 @@ struct ButtonState(Option<u128>);
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn setup(mut react_commands: ReactCommands)
+fn setup(mut c: Commands)
 {
-    let _ = react_commands.on(resource_mutation::<ButtonState>(), send_new_button_state);
+    let _ = c.react().on(resource_mutation::<ButtonState>(), send_new_button_state);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -58,10 +58,10 @@ fn send_new_button_state(
 //-------------------------------------------------------------------------------------------------------------------
 
 fn handle_server_events(
-    mut rcommands : ReactCommands,
-    mut server    : ResMut<DemoServer>,
-    mut clients   : ResMut<ClientConnections>,
-    mut state     : ReactResMut<ButtonState>,
+    mut c       : Commands,
+    mut server  : ResMut<DemoServer>,
+    mut clients : ResMut<ClientConnections>,
+    mut state   : ReactResMut<ButtonState>,
 ){
     let mut new_button_state = state.0;
 
@@ -110,7 +110,7 @@ fn handle_server_events(
     //   A) so reactors aren't scheduled excessively
     //   B) because reactors are deferred, so to get the right order of events we must do this last
     if new_button_state == state.0 { return; }
-    *state.get_mut(&mut rcommands) = ButtonState(new_button_state);
+    *state.get_mut(&mut c) = ButtonState(new_button_state);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
