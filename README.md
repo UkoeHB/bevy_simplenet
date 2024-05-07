@@ -12,8 +12,6 @@ Check out the example for a demonstration of how to build a Bevy client using th
 
 Check out [bevy_simplenet_events](https://github.com/UkoeHB/bevy_simplenet_events) for an event-based framework for networking that builds on this crate.
 
-This crate requires nightly rust.
-
 
 
 ## Features
@@ -238,7 +236,6 @@ fn read_on_server(server: &mut Server<TestChannel>)
 - Implement `AuthToken` for client/server authentication.
 - Add server shut down procedure.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
-- Move to stable rust once `HashMap::extract_if()` is stabilized.
 
 
 

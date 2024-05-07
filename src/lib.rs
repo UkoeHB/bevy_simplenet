@@ -1,7 +1,3 @@
-//features
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![feature(hash_extract_if)]
-
 //documentation
 #![doc = include_str!("../README.md")]
 #[allow(unused_imports)]

@@ -48,8 +48,11 @@ impl PendingRequestTracker
 
     /// Convert requests with [`MessageStatus::Sent`] or [`MessageStatus::Failed`] to [`RequestStatus::ResponseLost`]
     /// and drain them.
-    pub(crate) fn drain_failed_requests(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    //todo: use extract_if once stabilized
+    //pub(crate) fn drain_failed_requests(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    pub(crate) fn drain_failed_requests(&mut self) -> Vec<RequestSignal>
     {
+        /*
         self.pending_requests.extract_if(
                 move |_, signal| -> bool
                 {
@@ -58,11 +61,25 @@ impl PendingRequestTracker
                     true
                 }
             ).map(|(_, signal)| signal)
+        */
+        let mut drained = Vec::default();
+        self.pending_requests.retain(
+                |_, signal| -> bool
+                {
+                    if signal.status() == RequestStatus::Sending { return true; }
+                    signal.inner().set(RequestStatus::ResponseLost);
+                    drained.push(signal.clone());
+                    false
+                }
+            );
+        drained
     }
 
     /// Abort and drain all pending requests.
-    pub(crate) fn abort_all(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    //pub(crate) fn abort_all(&mut self) -> impl Iterator<Item = RequestSignal> + '_
+    pub(crate) fn abort_all(&mut self) -> Vec<RequestSignal>
     {
+        /*
         self.pending_requests.extract_if(
                 move |_, signal| -> bool
                 {
@@ -70,6 +87,17 @@ impl PendingRequestTracker
                     true
                 }
             ).map(|(_, signal)| signal)
+        */
+        let mut drained = Vec::default();
+        self.pending_requests.retain(
+                |_, signal| -> bool
+                {
+                    signal.inner().set(RequestStatus::ResponseLost);
+                    drained.push(signal.clone());
+                    false
+                }
+            );
+        drained
     }
 }
 

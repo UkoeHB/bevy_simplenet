@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0]
+
+### Changed
+
+- Remove dependency on nightly.
+
+
 ## [0.10.1]
 
 ### Changed
