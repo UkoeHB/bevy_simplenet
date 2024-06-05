@@ -232,7 +232,6 @@ fn read_on_server(server: &mut Server<TestChannel>)
 
 ## TODOs
 
-- Fix linker errors when the `bevy/dynamic_linking` feature is enabled.
 - Implement `AuthToken` for client/server authentication.
 - Add server shut down procedure.
 - Use const generics to bake protocol versions into `Server` and `Client` directly, instead of relying on factories (currently blocked by lack of robust compiler support).
