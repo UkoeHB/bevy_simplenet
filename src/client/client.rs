@@ -269,7 +269,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
     /// Makes a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
     {
-        ClientFactory{ protocol_version, _phantom: PhantomData::default() }
+        ClientFactory{ protocol_version, _phantom: PhantomData }
     }
 
     /// Makes a new client.

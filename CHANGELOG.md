@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1]
+
+### Added
+
+- `ServerFactory::new_server_with_router` method for building custom routers.
+
+
 ## [0.11.0]
 
 ### Changed

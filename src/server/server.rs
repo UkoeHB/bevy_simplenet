@@ -62,7 +62,7 @@ async fn websocket_handler<Channel: ChannelPack>(
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor_config: AcceptorConfig)
+async fn run_server(router: axum::Router, listener: std::net::TcpListener, acceptor_config: AcceptorConfig)
 {
     // set listener
     let server = axum_server::Server::from_tcp(listener);
@@ -78,7 +78,7 @@ async fn run_server(app: axum::Router, listener: std::net::TcpListener, acceptor
     };
 
     // serve it
-    if let Err(err) = server.serve(app.into_make_service_with_connect_info::<SocketAddr>()).await
+    if let Err(err) = server.serve(router.into_make_service_with_connect_info::<SocketAddr>()).await
     {
         tracing::error!(?err, "server stopped running with error");
     }
@@ -301,10 +301,10 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
     /// Makes a new server factory with a given protocol version.
     pub fn new(protocol_version: &'static str) -> Self
     {
-        ServerFactory{ protocol_version, _phantom: PhantomData::default() }
+        ServerFactory{ protocol_version, _phantom: PhantomData }
     }
 
-    /// Makes a new server.
+    /// Makes a new server with a default [`axum::Router`].
     ///
     /// Only works with a tokio runtime handle.
     pub fn new_server<A>(&self,
@@ -312,7 +312,31 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
         address         : A,
         acceptor_config : AcceptorConfig,
         authenticator   : Authenticator,
-        config          : ServerConfig
+        config          : ServerConfig,
+    ) -> Server<Channel>
+    where
+        A: std::net::ToSocketAddrs + Send + 'static,
+    {
+        self.new_server_with_router(
+                runtime_handle,
+                address,
+                acceptor_config,
+                authenticator,
+                config,
+                axum::Router::new(),
+            )
+    }
+
+    /// Makes a new server with a user-constructed [`axum::Router`].
+    ///
+    /// Only works with a tokio runtime handle.
+    pub fn new_server_with_router<A>(&self,
+        runtime_handle  : enfync::builtin::native::TokioHandle,
+        address         : A,
+        acceptor_config : AcceptorConfig,
+        authenticator   : Authenticator,
+        config          : ServerConfig,
+        router          : axum::Router,
     ) -> Server<Channel>
     where
         A: std::net::ToSocketAddrs + Send + 'static,
@@ -372,7 +396,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
             };
 
         // prepare router
-        let app = axum::Router::new()
+        let router = router
             .route("/ws", axum::routing::get(websocket_handler::<Channel>))
             .layer(axum::Extension(server.clone()))
             .layer(axum::Extension(Arc::new(prevalidator)))
@@ -386,7 +410,7 @@ impl<Channel: ChannelPack> ServerFactory<Channel>
 
         // launch the server core
         let server_running_signal = runtime_handle.spawn(
-                async move { run_server(app, connection_listener, acceptor_config).await }
+                async move { run_server(router, connection_listener, acceptor_config).await }
             );
 
         // finish assembling our server
