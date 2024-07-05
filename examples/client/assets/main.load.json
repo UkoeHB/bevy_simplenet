@@ -1,0 +1,46 @@
+{
+
+"#manifest": {
+    "": "example.client"
+},
+
+"scene": {
+    "FlexStyle": {
+        "dims": {"width": {"Vw": 100.0}, "height": {"Vh": 100.0}},
+        "content": {"flex_direction": "Column", "justify_main": "Center", "justify_cross": "Center"}
+    },
+
+    "status": {
+        "AbsoluteStyle": {
+            "dims": {"top": {"Px": 5.0}, "right": {"Px": 9.0}, "bottom": "Auto", "left": "Auto"}
+        },
+        "TextLine": {}
+    },
+
+    "owner": {
+        "FlexStyle": {
+            "flex": {"margin": {"bottom": {"Px": 25.0}}}
+        },
+        "TextLine": {}
+    }
+},
+
+"button": {
+    "FlexStyle": {"dims": {"width": {"Px": 300.0}, "height": {"Px": 175.0}}},
+    "Multi<Responsive<BgColor>>": [[
+        {
+            "values": {
+                "idle": {"Hsla": {"hue": 125.0, "saturation": 0.25, "lightness": 0.45, "alpha": 1.0}}
+            }
+        },
+        {
+            "state": ["Selected"],
+            "values": {
+                "idle": {"Hsla": {"hue": 125.0, "saturation": 0.4, "lightness": 0.3, "alpha": 1.0}}
+            }
+        }
+    ]],
+    "Interactive": []
+}
+
+}

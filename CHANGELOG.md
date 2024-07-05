@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0]
+
+### Changed
+
+- Updated to `bevy` v0.14.
+- Reworked example to use `bevy_cobweb_ui`.
+
+
 ## [0.11.1]
 
 ### Added

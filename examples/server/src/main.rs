@@ -35,14 +35,6 @@ struct ButtonState(Option<u128>);
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn setup(mut c: Commands)
-{
-    let _ = c.react().on(resource_mutation::<ButtonState>(), send_new_button_state);
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
 fn send_new_button_state(
     server  : Res<DemoServer>,
     clients : Res<ClientConnections>,
@@ -73,6 +65,8 @@ fn handle_server_events(
             {
                 bevy_simplenet::ServerReport::Connected(_, _) =>
                 {
+                    tracing::info!("client {:?} connected", client_id);
+
                     // add client
                     let _ = clients.0.insert(client_id);
 
@@ -83,6 +77,8 @@ fn handle_server_events(
                 }
                 bevy_simplenet::ServerReport::Disconnected =>
                 {
+                    tracing::info!("client {:?} disconnected", client_id);
+
                     // remove client
                     let _ = clients.0.remove(&client_id);
 
@@ -95,6 +91,8 @@ fn handle_server_events(
             {
                 DemoClientRequest::Select =>
                 {
+                    tracing::info!("received {:?} from client {:?}", request, client_id);
+
                     // acknowldge selection
                     server.ack(token);
 
@@ -121,7 +119,7 @@ fn main()
     // prepare tracing
     // /*
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::WARN)
+        .with_max_level(tracing::Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     // */
@@ -140,18 +138,16 @@ fn main()
         );
 
     // prep server
-    let mut app = App::empty();
+    let mut app = App::new();
     app
-        .add_event::<AppExit>()
         .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::from_millis(100)))
         .add_plugins(ReactPlugin)
-        .init_schedule(Main)
         .insert_resource(server)
         .init_resource::<ClientConnections>()
         .insert_react_resource(ButtonState::default());
 
     // setup
-    syscall(&mut app.world, (), setup);
+    app.react(|rc| rc.on_persistent(resource_mutation::<ButtonState>(), send_new_button_state));
 
     // run server
     app.add_systems(Main, handle_server_events)

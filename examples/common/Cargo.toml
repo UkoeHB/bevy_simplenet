@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy_simplenet = { path = "../../", default_features = false }
+bevy_simplenet = { path = "../../", default-features = false }
 serde          = { version = "1.0" }

@@ -3,18 +3,16 @@ use bevy_simplenet_common::*;
 
 //third-party shortcuts
 use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, WindowTheme};
+use bevy::window::WindowTheme;
 use bevy::winit::{UpdateMode, WinitSettings};
-use bevy_kot::prelude::*;
-use bevy_lunex::prelude::*;
+use bevy_cobweb::prelude::*;
+use bevy_cobweb_ui::prelude::*;
+use sickle::theme::{ComponentThemePlugin, DefaultTheme, UiContext};
+use sickle::ui_builder::{UiBuilderExt, UiRoot};
+use sickle::{DefaultTheme, SickleUiPlugin, UiContext};
 
 //standard shortcuts
 use std::fmt::Write;
-
-#[cfg(not(target_family = "wasm"))]
-use std::time::{SystemTime, UNIX_EPOCH};
-
-#[cfg(target_family = "wasm")]
 use wasm_timer::{SystemTime, UNIX_EPOCH};
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -31,7 +29,7 @@ fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Resource, Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(ReactResource, Copy, Clone, Eq, PartialEq, Debug)]
 enum ConnectionStatus
 {
     Connecting,
@@ -39,23 +37,23 @@ enum ConnectionStatus
     Dead,
 }
 
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn status_to_string(status: ConnectionStatus) -> &'static str
+impl ConnectionStatus
 {
-    match status
+    fn to_string(&self) -> &'static str
     {
-        ConnectionStatus::Connecting => "connecting...",
-        ConnectionStatus::Connected  => "connected",
-        ConnectionStatus::Dead       => "DEAD",
+        match *self
+        {
+            ConnectionStatus::Connecting => "connecting...",
+            ConnectionStatus::Connected  => "connected",
+            ConnectionStatus::Dead       => "DEAD",
+        }
     }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Component, Default)]
+#[derive(ReactResource, Default)]
 struct ButtonOwner
 {
     server_authoritative_id : Option<u128>,
@@ -74,16 +72,7 @@ impl ButtonOwner
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Component)]
-struct ConnectionStatusFlag;
-
-#[derive(Component)]
-struct ButtonOwnerTextFlag;
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Component)]
+#[derive(ReactResource)]
 struct PendingSelect(Option<bevy_simplenet::RequestSignal>);
 
 impl PendingSelect
@@ -105,49 +94,31 @@ impl Default for PendingSelect { fn default() -> Self { Self(None) } }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn refresh_status_text(
-    mut status_text : Query<&mut Text, With<ConnectionStatusFlag>>,
-    status          : Res<ConnectionStatus>,
-){
-    if !status.is_changed() { return; }
-    let text_section = &mut status_text.single_mut().sections[0].value;
-    text_section.clear();
-    let _ = write!(text_section, "Status: {}", status_to_string(*status));
-}
+/// Entity event for when the button should be selected.
+struct SelectButton;
+
+/// Entity event for when the button should be deselected.
+struct DeselectButton;
+
+/// Marker type for the counter theme.
+#[derive(Component, UiContext, DefaultTheme, Copy, Clone, Debug)]
+struct ButtonWidget;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn refresh_button_owner_text(
-    mut status_text : Query<&mut Text, With<ButtonOwnerTextFlag>>,
-    current_state   : Query<&ButtonOwner, Changed<ButtonOwner>>,
-){
-    if current_state.is_empty() { return; }
-    let text_section = &mut status_text.single_mut().sections[0].value;
-    text_section.clear();
-    match current_state.single().display_id()
-    {
-        Some(id) => { let _ = write!(text_section, "Owner: {}", id % 1_000_000u128); }
-        None     => { let _ = write!(text_section, "No owner"); }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-/// Handler for when the button is selected.
 fn handle_button_select(
-    mut commands      : Commands,
-    client            : Res<DemoClient>,
-    status            : Res<ConnectionStatus>,
-    mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
-){
-    let (mut pending_select, mut owner, deselect_callback) = current_state.single_mut();
-
+    mut c: Commands,
+    client: Res<DemoClient>,
+    status: ReactRes<ConnectionStatus>,
+    mut pending_select: ReactResMut<PendingSelect>,
+    mut owner: ReactResMut<ButtonOwner>
+)
+{
     // if not connected then we force-deselect
     if *status != ConnectionStatus::Connected
     {
-        commands.add(deselect_callback.clone());
+        c.react().broadcast(DeselectButton);
         return;
     }
 
@@ -155,36 +126,35 @@ fn handle_button_select(
     let signal = client.request(DemoClientRequest::Select);
 
     // save the predicted input
-    pending_select.0   = Some(signal);
-    owner.predicted_id = Some(client.id());
+    pending_select.get_mut(&mut c).0   = Some(signal);
+    owner.get_mut(&mut c).predicted_id = Some(client.id());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Handler for when the button is deselected.
-fn handle_button_deselect(mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner)>)
+fn handle_button_deselect(
+    mut c: Commands,
+    mut pending_select: ReactResMut<PendingSelect>,
+    mut owner: ReactResMut<ButtonOwner>
+)
 {
-    let (mut pending_select, mut owner) = current_state.single_mut();
-
-    // clear the input prediction
-    pending_select.0   = None;
-    owner.predicted_id = None;
+    pending_select.get_mut(&mut c).0   = None;
+    owner.get_mut(&mut c).predicted_id = None;
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn set_new_server_state(
-    In(server_state)  : In<Option<u128>>,
-    mut commands      : Commands,
-    client            : Res<DemoClient>,
-    mut current_state : Query<(&PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
+    In(server_state) : In<Option<u128>>,
+    mut c            : Commands,
+    client           : Res<DemoClient>,
+    pending_select   : ReactRes<PendingSelect>,
+    mut owner        : ReactResMut<ButtonOwner>
 ){
-    let (pending_select, mut owner, deselect_callback) = current_state.single_mut();
-
     // update server state
-    owner.server_authoritative_id = server_state;
+    owner.get_mut(&mut c).server_authoritative_id = server_state;
 
     // check if we are predicted
     if pending_select.is_predicted() { return; }
@@ -192,187 +162,77 @@ fn set_new_server_state(
     // if not predicted and server state doesn't match our id, deselect
     if server_state != Some(client.id())
     {
-        commands.add(deselect_callback.clone());
+        c.react().broadcast(DeselectButton);
     }
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn connection_status_section(ui: &mut UiBuilder<MainUi>, area: Widget)
+fn build_ui(mut c: Commands, mut s: ResMut<SceneLoader>)
 {
-    // text layout helper
-    let layout_helper = Widget::create(
-            ui.tree(),
-            area.end(""),
-            RelativeLayout{  //add slight buffer around edge; extend y-axis to avoid resizing issues
-                absolute_1: Vec2 { x: 5., y: 5. },
-                absolute_2: Vec2 { x: -5., y: 0. },
-                relative_1: Vec2 { x: 0., y: 0. },
-                relative_2: Vec2 { x: 100., y: 200. },
-                ..Default::default()
-            }
-        ).unwrap();
+    let file = LoadableRef::from_file("example.client");
+    c.ui_builder(UiRoot).load_scene(&mut s, file.e("scene"), |l| {
+        l.edit("status", |l| {
+            l.update_on(resource_mutation::<ConnectionStatus>(),
+                |id| move |mut t: TextEditor, status: ReactRes<ConnectionStatus>| {
+                    t.write(id, |t| write!(t, "Status: {}", status.to_string()));
+                }
+            );
+        })
+        .edit("owner", |l| {
+            l.update_on(resource_mutation::<ButtonOwner>(),
+                |id| move |mut t: TextEditor, owner: ReactRes<ButtonOwner>| {
+                    t.write(id, |t| {
+                        match owner.display_id()
+                        {
+                            Some(id) => write!(t, "Owner: {}", id % 1_000_000u128),
+                            None     => write!(t, "No owner"),
+                        }
+                    });
+                }
+            );
+        });
 
-    // text widget
-    let text = Widget::create(
-            ui.tree(),
-            layout_helper.end(""),
-            SolidLayout::new()  //keep text in top right corner when window is resized
-                .with_horizontal_anchor(1.0)
-                .with_vertical_anchor(-1.0),
-        ).unwrap();
-
-    let text_style = TextStyle {
-            font      : ui.asset_server.load("fonts/FiraSans-Bold.ttf"),
-            font_size : 45.0,
-            color     : Color::WHITE,
-        };
-
-    ui.commands().spawn(
-            (
-                TextElementBundle::new(
-                    text,
-                    TextParams::topleft().with_style(&text_style),
-                    "Status: connecting..."  //use initial value to get correct initial text boundary
-                ),
-                ConnectionStatusFlag
-            )
-        );
+        let mut placeholder = Entity::PLACEHOLDER;
+        l.load_with_theme::<ButtonWidget>(file.e("button"), &mut placeholder, |n, _| {
+            let button = n.id();
+            n.insert(ButtonWidget);
+            n.on_pressed(move |mut c: Commands| {
+                c.react().entity_event(button, Select);
+                c.react().broadcast(SelectButton);
+            })
+            .react().on(broadcast::<DeselectButton>(), move |mut c: Commands| {
+                c.react().entity_event(button, Deselect);
+            });
+            n.on_select(|| println!("selected"))
+            .on_deselect(|| println!("deselected"));
+        });
+    });
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn button_owner_section(ui: &mut UiBuilder<MainUi>, area: Widget)
-{
-    // text layout helper (extend y-axis to avoid resizing issues)
-    let layout_helper = relative_widget(ui.tree(), area.end(""), (0., 100.), (0., 200.));
-
-    // text widget
-    let text = Widget::create(ui.tree(), layout_helper.end(""), SolidLayout::new()).unwrap();
-    let text_style = TextStyle {
-            font      : ui.asset_server.load("fonts/FiraSans-Bold.ttf"),
-            font_size : 45.0,
-            color     : Color::WHITE,
-        };
-
-    ui.commands().spawn(
-            (
-                TextElementBundle::new(
-                    text,
-                    TextParams::center().with_style(&text_style),
-                    "Owner: 000000"  //use initial value to get correct initial text boundary
-                ),
-                ButtonOwnerTextFlag
-            )
-        );
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn button_section(ui: &mut UiBuilder<MainUi>, area: Widget)
-{
-    // default button image tied to button
-    let default_widget = make_overlay(ui.tree(), &area, "default", true);
-    let image = ImageElementBundle::new(
-            &default_widget,
-            ImageParams::center()
-                .with_width(Some(100.))
-                .with_height(Some(100.))
-                .with_color(Color::GRAY),
-            ui.asset_server.load("example_button_rect.png"),
-            Vec2::new(250.0, 142.0)
-        );
-    ui.commands().spawn(image);
-
-    // selected button image tied to button
-    let selected_widget = make_overlay(ui.tree(), &area, "selected", false);
-    let image = ImageElementBundle::new(
-            &selected_widget,
-            ImageParams::center()
-                .with_width(Some(100.))
-                .with_height(Some(100.))
-                .with_color(Color::DARK_GRAY),  //tint when selected
-            ui.asset_server.load("example_button_rect.png"),
-            Vec2::new(250.0, 142.0)
-        );
-    ui.commands().spawn(image);
-
-    // button interactivity
-    let entity = InteractiveElementBuilder::new()
-        .with_default_widget(default_widget)
-        .with_selected_widget(selected_widget)
-        .select_on_click()
-        .on_select(handle_button_select)
-        .on_deselect(handle_button_deselect)
-        .spawn_with::<MouseLButtonMain>(ui, area)
-        .unwrap();
-    let mut entity_commands = ui.commands().entity(entity);
-    entity_commands.insert(UiInteractionBarrier::<MainUi>::default());
-
-    // cached select signal and server state tracking
-    entity_commands.insert(
-            (
-                PendingSelect::default(),
-                ButtonOwner::default(),
-            )
-        );
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn build_ui(mut ui: UiBuilder<MainUi>)
-{
-    // root widget
-    let root = relative_widget(ui.tree(), "root", (0., 100.), (0., 100.));
-
-    // connection status text
-    let text_base = relative_widget(ui.tree(), root.end("text"), (70., 100.), (0., 20.));
-    connection_status_section(&mut ui, text_base);
-
-    // button owner text
-    let owner_base = relative_widget(ui.tree(), root.end("owner"), (37., 63.), (15., 35.));
-    button_owner_section(&mut ui, owner_base);
-
-    // button
-    let button_base = relative_widget(ui.tree(), root.end("button"), (35., 65.), (40., 60.));
-    button_section(&mut ui, button_base);
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-fn setup(mut commands: Commands, window: Query<Entity, (With<Window>, With<PrimaryWindow>)>)
+fn setup(mut commands: Commands)
 {
     // prepare 2D camera
     commands.spawn(
             Camera2dBundle{ transform: Transform{ translation: Vec3 { x: 0., y: 0., z: 1000. }, ..default() }, ..default() }
         );
-
-    // make lunex cursor
-    commands.spawn((Cursor::new(), Transform::default(), Visibility::default(), MainMouseCursor));
-
-    // prepare lunex ui tree
-    commands.insert_resource(StyleStackRes::<MainUi>::default());
-    let tree = UiTree::<MainUi>::new("ui");
-
-    let window = window.single();
-    commands.entity(window).insert(tree.bundle());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn handle_client_events(
-    mut commands      : Commands,
-    mut client        : ResMut<DemoClient>,
-    mut status        : ResMut<ConnectionStatus>,
-    mut current_state : Query<(&mut PendingSelect, &mut ButtonOwner, &Callback<Deselect>)>,
+    mut c              : Commands,
+    mut client         : ResMut<DemoClient>,
+    mut status         : ReactResMut<ConnectionStatus>,
+    mut pending_select : ReactResMut<PendingSelect>,
+    mut owner          : ReactResMut<ButtonOwner>
 ){
-    let (mut pending_select, mut owner, deselect_callback) = current_state.single_mut();
+    let mut next_status = *status;
 
     while let Some(client_event) = client.next()
     {
@@ -380,10 +240,10 @@ fn handle_client_events(
         {
             DemoClientEvent::Report(connection_report) => match connection_report
             {
-                bevy_simplenet::ClientReport::Connected         => *status = ConnectionStatus::Connected,
+                bevy_simplenet::ClientReport::Connected         => next_status = ConnectionStatus::Connected,
                 bevy_simplenet::ClientReport::Disconnected      |
                 bevy_simplenet::ClientReport::ClosedByServer(_) |
-                bevy_simplenet::ClientReport::ClosedBySelf      => *status = ConnectionStatus::Connecting,
+                bevy_simplenet::ClientReport::ClosedBySelf      => next_status = ConnectionStatus::Connecting,
                 bevy_simplenet::ClientReport::IsDead(aborted_reqs) =>
                 {
                     for aborted_req in aborted_reqs
@@ -391,9 +251,9 @@ fn handle_client_events(
                         if !pending_select.equals_request(aborted_req) { continue; }
 
                         // an error occurred, roll back the predicted input
-                        commands.add(deselect_callback.clone());
+                        c.react().broadcast(DeselectButton);
                     }
-                    *status = ConnectionStatus::Dead;
+                    next_status = ConnectionStatus::Dead;
                 }
             }
             DemoClientEvent::Msg(message) => match message
@@ -401,7 +261,7 @@ fn handle_client_events(
                 DemoServerMsg::Current(new_id) =>
                 {
                     // reset current state
-                    commands.add(move |world: &mut World| syscall(world, new_id, set_new_server_state));
+                    c.syscall(new_id, set_new_server_state);
                 }
             }
             DemoClientEvent::Ack(request_id) =>
@@ -409,16 +269,17 @@ fn handle_client_events(
                 if !pending_select.equals_request(request_id) { continue; }
 
                 // merge predicted input
+                let owner = owner.get_mut(&mut c);
                 owner.server_authoritative_id = owner.predicted_id;
-                owner.predicted_id            = None;
-                pending_select.0              = None;
+                owner.predicted_id = None;
+                pending_select.get_mut(&mut c).0 = None;
             }
             DemoClientEvent::Reject(request_id) =>
             {
                 if !pending_select.equals_request(request_id) { continue; }
 
                 // roll back predicted input
-                commands.add(deselect_callback.clone());
+                c.react().broadcast(DeselectButton);
             }
             DemoClientEvent::Response((), request_id) |
             DemoClientEvent::SendFailed(request_id)    |
@@ -427,9 +288,13 @@ fn handle_client_events(
                 if !pending_select.equals_request(request_id) { continue; }
 
                 // an error occurred, roll back the predicted input
-                commands.add(deselect_callback.clone());
+                c.react().broadcast(DeselectButton);
             }
         }
+    }
+
+    if next_status != *status {
+        *status.get_mut(&mut c) = next_status;
     }
 }
 
@@ -478,24 +343,24 @@ fn main()
     App::new()
         .add_plugins(bevy_plugins)
         .insert_resource(WinitSettings{
-            focused_mode   : UpdateMode::Reactive{ wait: std::time::Duration::from_millis(100) },
-            unfocused_mode : UpdateMode::Reactive{ wait: std::time::Duration::from_millis(100) },
+            focused_mode   : UpdateMode::reactive(std::time::Duration::from_millis(100)),
+            unfocused_mode : UpdateMode::reactive(std::time::Duration::from_millis(100)),
             ..Default::default()
         })
+        .add_plugins(SickleUiPlugin)
         .add_plugins(ReactPlugin)
-        .add_plugins(LunexUiPlugin2D::<MainUi>::new())
-        .register_interaction_source(MouseLButtonMain::default())
+        .add_plugins(CobwebUiPlugin)
+        .load("main.load.json")
+        .add_plugins(ComponentThemePlugin::<ButtonWidget>::new())
         .insert_resource(client)
-        .insert_resource(ConnectionStatus::Connecting)
-        .add_systems(PreStartup, setup)
-        .add_systems(Startup, build_ui)
-        .add_systems(Update,
-            (
-                handle_client_events, apply_deferred,
-                refresh_status_text,
-                refresh_button_owner_text,
-            ).chain()
-        )
+        .insert_react_resource(ConnectionStatus::Connecting)
+        .init_react_resource::<ButtonOwner>()
+        .init_react_resource::<PendingSelect>()
+        .add_systems(Startup, setup)
+        .add_systems(OnEnter(LoadState::Done), build_ui)
+        .add_systems(Update, handle_client_events)
+        .react(|rc| rc.on_persistent(broadcast::<SelectButton>(), handle_button_select))
+        .react(|rc| rc.on_persistent(broadcast::<DeselectButton>(), handle_button_deselect))
         .run();
 }
 

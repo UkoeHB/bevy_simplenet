@@ -35,7 +35,7 @@ On WASM targets the client backend will not update while any other tasks are run
 
 - Servers and clients must be created with [enfync](https://crates.io/crates/enfync) runtimes. The backend is [ezsockets](https://github.com/gbaranski/ezsockets).
 - A client's [`AuthRequest`](bevy_simplenet::AuthRequest) type must match the corresponding server's [`Authenticator`](bevy_simplenet::Authenticator) type.
-- Client ids are defined by clients via their [`AuthRequest`](bevy_simplenet::AuthRequest) when connecting to a server. This means multiple sessions from the same client will have the same session id. Connections will be rejected if an id is already connected.
+- Client ids are defined by clients via their [`AuthRequest`](bevy_simplenet::AuthRequest) when connecting to a server. Connections will be rejected if an id is already connected.
 - Client connect messages will be cloned for all reconnect attempts, so they should be treated as static data.
 - Server or client messages may fail to send if the underlying connection is broken. Clients can use the signals returned from [`Client::send()`](bevy_simplenet::Client::send) and [`Client::request()`](bevy_simplenet::Client::request) to track the status of a message. Client request results will always be emitted by [`Client::next()`](bevy_simplenet::Client::next). Message tracking is not available for servers.
 - Tracing levels assume the server is trusted and clients are not trusted.
@@ -213,7 +213,7 @@ fn read_on_client(client: &mut Client<TestChannel>)
 ```rust
 fn read_on_server(server: &mut Server<TestChannel>)
 {
-    while let Some((session_id, server_event)) = server.next()
+    while let Some((client_id, server_event)) = server.next()
     {
         match server_event
         {
@@ -240,8 +240,9 @@ fn read_on_server(server: &mut Server<TestChannel>)
 
 ## Bevy compatability
 
-| bevy   | bevy_simplenet  |
-|--------|-----------------|
-| 0.13   | v0.9.0 - master |
-| 0.12   | v0.5.0 - v0.8.0 |
-| 0.11   | v0 - v0.4.0     |
+| bevy   | bevy_simplenet   |
+|--------|------------------|
+| 0.14   | v0.12.0 - master |
+| 0.13   | v0.9.0 - v0.11.0 |
+| 0.12   | v0.5.0 - v0.8.0  |
+| 0.11   | v0 - v0.4.0      |
