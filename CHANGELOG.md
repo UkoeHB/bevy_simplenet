@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1]
+
+### Fixed
+
+- Compilation error when `tls-rustls` or `tls-openssl` features were enabled.
+
+
 ## [0.12.0]
 
 ### Changed

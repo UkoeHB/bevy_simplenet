@@ -67,18 +67,29 @@ async fn run_server(router: axum::Router, listener: std::net::TcpListener, accep
     // set listener
     let server = axum_server::Server::from_tcp(listener);
 
-    // set acceptor
-    let server = match acceptor_config
+    // set acceptor and serve
+    let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
+    let result = match acceptor_config
     {
-        AcceptorConfig::Default         => server.acceptor(axum_server::accept::DefaultAcceptor::new()),
+        AcceptorConfig::Default =>
+        {
+            let server = server.acceptor(axum_server::accept::DefaultAcceptor::new());
+            server.serve(make_service).await
+        }
         #[cfg(feature = "tls-rustls")]
-        AcceptorConfig::Rustls(config)  => server.acceptor(axum_server::tls_rustls::RustlsAcceptor::new(config)),
+        AcceptorConfig::Rustls(config) =>
+        {
+            let server = server.acceptor(axum_server::tls_rustls::RustlsAcceptor::new(config));
+            server.serve(make_service).await
+        }
         #[cfg(feature = "tls-openssl")]
-        AcceptorConfig::OpenSSL(config) => server.acceptor(axum_server::tls_openssl::OpenSSLAcceptor::new(config)),
+        AcceptorConfig::OpenSSL(config) =>
+        {
+            let server = server.acceptor(axum_server::tls_openssl::OpenSSLAcceptor::new(config));
+            server.serve(make_service).await
+        }
     };
-
-    // serve it
-    if let Err(err) = server.serve(router.into_make_service_with_connect_info::<SocketAddr>()).await
+    if let Err(err) = result
     {
         tracing::error!(?err, "server stopped running with error");
     }
