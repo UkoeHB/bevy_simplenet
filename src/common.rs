@@ -9,7 +9,7 @@ use std::net::SocketAddr;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Client id specified in client [`AuthTokens`](AuthToken).
+/// Client id specified in client [`AuthTokens`](crate::AuthToken).
 pub type ClientId = u128;
 
 //-------------------------------------------------------------------------------------------------------------------

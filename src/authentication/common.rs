@@ -11,7 +11,7 @@ use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Secret size for the [`Authenticator::Secret`] authentication type.
+/// Secret size for the `Authenticator::Secret` authentication type.
 pub const SECRET_AUTH_BYTES: usize = 16;
 
 //-------------------------------------------------------------------------------------------------------------------
