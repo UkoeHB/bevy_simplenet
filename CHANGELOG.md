@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.1]
+
+- Shut down clients instead of attempting to reconnect after `AuthTokens` expire.
+
+
 ## [0.13.0]
 
 - Implement `AuthToken` and `Authentication::Token`.

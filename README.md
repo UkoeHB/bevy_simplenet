@@ -275,7 +275,7 @@ let client = client_factory().new_client(
 );
 ```
 
-Note that when the token has expired, `bevy_simplenet` clients will fail all automatic reconnect attempts (e.g. after a network error). You should adjust `ClientConfig::max_reconnect_attempts` and `ClientConfig::reconnect_interval` so the client will shut down once the token has expired. Then when the client emits `ClientEvent::Report(ClientReport::IsDead(_))` you can request a new auth token and set up a new client.
+When the token expires, `bevy_simplenet` clients will stop automatically reconnecting on network error and instead shut down and emit `ClientEvent::Report(ClientReport::IsDead(_))`. You can request a new auth token and set up a new client in that event.
 
 It is recommended to set a relatively low auth token expiry if you are concerned about DoS from clients clogging up the server's capacity, or if you have a force-disconnect/blacklist mechanism in your backend (which presumably communicates with the auth-token-producing endpoint).
 

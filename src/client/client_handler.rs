@@ -239,7 +239,13 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         // clean up pending requests
         Self::clean_pending_requests(&mut pending_requests, &self.client_event_sender);
 
-        //todo: don't try to reconnect if auth token expired
+        // check auth token expiry
+        if let AuthRequest::Token{token} = self.auth.auth {
+            if token.is_expired() {
+                return Ok(ezsockets::client::ClientCloseMode::Close);
+            }
+        }
+
         Ok(ezsockets::client::ClientCloseMode::Reconnect)
     }
 
@@ -268,11 +274,18 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         //   connected reports (except when the client is dying)
         Self::clean_pending_requests(&mut pending_requests, &self.client_event_sender);
 
+        // check auth token expiry
+        if let AuthRequest::Token{token} = self.auth.auth {
+            if token.is_expired() {
+                return Ok(ezsockets::client::ClientCloseMode::Close);
+            }
+        }
+
         // choose response
         match self.config.reconnect_on_disconnect
         {
-            true  => return Ok(ezsockets::client::ClientCloseMode::Reconnect),
-            false => return Ok(ezsockets::client::ClientCloseMode::Close),
+            true  => Ok(ezsockets::client::ClientCloseMode::Reconnect),
+            false => Ok(ezsockets::client::ClientCloseMode::Close),
         }
     }
 
@@ -306,11 +319,18 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
         //   connected reports (except when the client is dying)
         Self::clean_pending_requests(&mut pending_requests, &self.client_event_sender);
 
+        // check auth token expiry
+        if let AuthRequest::Token{token} = self.auth.auth {
+            if token.is_expired() {
+                return Ok(ezsockets::client::ClientCloseMode::Close);
+            }
+        }
+
         // choose response
         match self.config.reconnect_on_server_close
         {
-            true  => return Ok(ezsockets::client::ClientCloseMode::Reconnect),
-            false => return Ok(ezsockets::client::ClientCloseMode::Close),
+            true  => Ok(ezsockets::client::ClientCloseMode::Reconnect),
+            false => Ok(ezsockets::client::ClientCloseMode::Close),
         }
     }
 }
