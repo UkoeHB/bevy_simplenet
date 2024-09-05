@@ -1,15 +1,10 @@
 //local shortcuts
 
 //third-party shortcuts
+use wasm_timer::{SystemTime, UNIX_EPOCH};
 
 //standard shortcuts
 use std::time::Duration;
-
-#[cfg(not(target_family = "wasm"))]
-use std::time::{SystemTime, UNIX_EPOCH};
-
-#[cfg(target_family = "wasm")]
-use wasm_timer::{SystemTime, UNIX_EPOCH};
 
 //-------------------------------------------------------------------------------------------------------------------
 

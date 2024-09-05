@@ -91,21 +91,35 @@ fn authentication()
 {
     // prep authenticators
     let none_authenticator = bevy_simplenet::Authenticator::None;
+
     let secret_authenticator_a = bevy_simplenet::Authenticator::Secret{secret: (0u128).to_le_bytes()};
     let secret_authenticator_b = bevy_simplenet::Authenticator::Secret{secret: (1u128).to_le_bytes()};
-    //let token_authenticator = bevy_simplenet::Authenticator::Token{};
+
+    let (token_privkey_a, token_pubkey_a) = bevy_simplenet::generate_auth_token_keys();
+    let (_token_privkey_b, token_pubkey_b) = bevy_simplenet::generate_auth_token_keys();
+    let token_authenticator_a = bevy_simplenet::Authenticator::Token{pubkey: token_pubkey_a};
+    let token_authenticator_b = bevy_simplenet::Authenticator::Token{pubkey: token_pubkey_b};
 
     // prep auth requests
     let none_request = bevy_simplenet::AuthRequest::None{client_id: 0u128};
     let secret_request_a = bevy_simplenet::AuthRequest::Secret{client_id: 1u128, secret: (0u128).to_le_bytes()};
+    let token_a = bevy_simplenet::make_auth_token_from_lifetime(&token_privkey_a, 1, 2u128);
+    let token_request_a = bevy_simplenet::AuthRequest::Token{token: token_a};
 
     // test cases
     assert!(authentication_test(none_authenticator.clone(), none_request.clone()));
-    assert!(!authentication_test(none_authenticator.clone(), secret_request_a.clone()));
-    assert!(!authentication_test(secret_authenticator_a.clone(), none_request.clone()));
+    assert!(authentication_test(none_authenticator.clone(), secret_request_a.clone()));
+    assert!(authentication_test(none_authenticator.clone(), token_request_a.clone()));
 
     assert!(authentication_test(secret_authenticator_a.clone(), secret_request_a.clone()));
+    assert!(!authentication_test(secret_authenticator_a.clone(), none_request.clone()));
+    assert!(!authentication_test(secret_authenticator_a.clone(), token_request_a.clone()));
     assert!(!authentication_test(secret_authenticator_b.clone(), secret_request_a.clone()));
+
+    assert!(authentication_test(token_authenticator_a.clone(), token_request_a.clone()));
+    assert!(!authentication_test(token_authenticator_a.clone(), none_request.clone()));
+    assert!(!authentication_test(token_authenticator_a.clone(), secret_request_a.clone()));
+    assert!(!authentication_test(token_authenticator_b.clone(), token_request_a.clone()));
 }
 
 //-------------------------------------------------------------------------------------------------------------------

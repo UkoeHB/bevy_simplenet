@@ -306,8 +306,11 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                 }
 
                 // check if the target session is still alive (for request/response patterns)
-                // - note that this check synchronizes with the session registry, guaranteeing our response can only be
-                //   sent to the request's originating session
+                // - Note that this check synchronizes with the session registry, guaranteeing our response can only be
+                //   sent to the request's originating session. Synchronization: in order for `self.session_registry`
+                //   to return a new session, `Self::on_disconnect` must be called for the old session. Once
+                //   `Self::on_disconnect` is called, the SessionHandler for the old session will have been dropped,
+                //   guaranteeing this death signal will be set.
                 if let Some(death_signal) = maybe_death_signal
                 {
                     if death_signal.is_dead()

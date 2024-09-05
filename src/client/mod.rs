@@ -8,10 +8,10 @@ mod pending_request_tracker;
 mod request_signal;
 
 //API exports
-pub use crate::client::client::*;
-pub use crate::client::client_event::*;
-pub(crate) use crate::client::client_handler::*;
-pub use crate::client::config::*;
-pub use crate::client::errors::*;
-pub(crate) use crate::client::pending_request_tracker::*;
-pub use crate::client::request_signal::*;
+pub use client::*;
+pub use client_event::*;
+pub(crate) use client_handler::*;
+pub use config::*;
+pub use errors::*;
+pub(crate) use pending_request_tracker::*;
+pub use request_signal::*;

@@ -1,4 +1,6 @@
 //documentation
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![allow(rustdoc::redundant_explicit_links)]
 #![doc = include_str!("../README.md")]
 #[allow(unused_imports)]
 use crate as bevy_simplenet;
@@ -11,22 +13,20 @@ mod rate_limiter;
 mod text_ping_pong;
 
 #[cfg(feature = "client")]
-#[cfg_attr(docsrs, doc(cfg(feature = "client")))]
 mod client;
 
 #[cfg(feature = "server")]
-#[cfg_attr(docsrs, doc(cfg(feature = "server")))]
 mod server;
 
 //API exports
-pub use crate::authentication::*;
-pub use crate::common::*;
-pub(crate) use crate::common_internal::*;
-pub use crate::rate_limiter::*;
-pub(crate) use crate::text_ping_pong::*;
+pub use authentication::*;
+pub use common::*;
+pub(crate) use common_internal::*;
+pub use rate_limiter::*;
+pub(crate) use text_ping_pong::*;
 
 #[cfg(feature = "client")]
-pub use crate::client::*;
+pub use client::*;
 
 #[cfg(feature = "server")]
-pub use crate::server::*;
+pub use server::*;

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.0]
+
+- Implement `AuthToken` and `Authentication::Token`.
+
+
 ## [0.12.1]
 
 ### Fixed
