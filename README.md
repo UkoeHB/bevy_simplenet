@@ -5,7 +5,7 @@ Provides a bi-directional server/client channel implemented over websockets. Thi
 - Client/server channel includes one-shot messages and a request/response API.
 - Client message statuses can be tracked.
 - Clients automatically work on native and WASM targets.
-- Clients can be authenticated by the server (WIP).
+- Clients can be authenticated by the server.
 - Provides optional server TLS.
 
 Check out the example for a demonstration of how to build a Bevy client using this crate.
@@ -232,7 +232,7 @@ fn read_on_server(server: &mut Server<TestChannel>)
 
 ## Client authentication
 
-Servers have three options for authentication clients:
+Servers have three options for authenticating clients:
 - `Authentication::None`: All connections are valid.
 - `Authentication::Secret`: A connection is valid if the client provides `AuthRequest::Secret` with a matching secret.
 - `Authentication::Token`: A connection is valid if the client provides `AuthRequest::Token` with a token produced by your backend.
@@ -277,7 +277,7 @@ let client = client_factory().new_client(
 
 Note that when the token has expired, `bevy_simplenet` clients will fail all automatic reconnect attempts (e.g. after a network error). You should adjust `ClientConfig::max_reconnect_attempts` and `ClientConfig::reconnect_interval` so the client will shut down once the token has expired. Then when the client emits `ClientEvent::Report(ClientReport::IsDead(_))` you can request a new auth token and set up a new client.
 
-It is recommended to set a relatively low auth token expiry if you are concerned about DoS from clients clogging up the server's capacity, or if you have a force-disconnect/blacklist mechanism on the server.
+It is recommended to set a relatively low auth token expiry if you are concerned about DoS from clients clogging up the server's capacity, or if you have a force-disconnect/blacklist mechanism in your backend (which presumably communicates with the auth-token-producing endpoint).
 
 
 ## TODOs
