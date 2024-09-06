@@ -264,7 +264,7 @@ let token = bevy_simplenet::make_auth_token_from_lifetime(&privkey, 10, 123u128)
 
 You send this token to the client.
 
-4. Client makes a `bevy_simplenet` client using the received token (the `server_url` can be transmitted alongside the token)).
+4. Client makes a `bevy_simplenet` client using the received token.
 ```rust
 let client = client_factory().new_client(
     enfync::builtin::Handle::default(),
@@ -274,6 +274,8 @@ let client = client_factory().new_client(
     TestConnectMsg(String::from("hello"))
 );
 ```
+
+Note that the `server_url` can be transmitted alongside the token for convenience. This way clients only need to know the auth token endpoint, and you can provision backend servers as needed.
 
 When the token expires, `bevy_simplenet` clients will stop automatically reconnecting on network error and instead shut down and emit `ClientEvent::Report(ClientReport::IsDead(_))`. You can request a new auth token and set up a new client in that event.
 
