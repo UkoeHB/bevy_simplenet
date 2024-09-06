@@ -174,7 +174,7 @@ fn send_server_message(server: Res<Server<TestChannel>>)
 }
 ```
 
-Send a response. The `RequestToken` allows us to correctly associate the response with the original response. If you drop the token then the client will automatically receive a `ClientEvent::Reject` event and their `RequestSignal` will return `RequestStatus::Rejected`.
+Send a response. The `RequestToken` allows us to correctly associate the response with the original request. If you drop the token then the client will automatically receive a `ClientEvent::Reject` event and their `RequestSignal` will return `RequestStatus::Rejected`.
 
 ```rust
 fn send_server_response(In(token): In<RequestToken>, server: Res<Server<TestChannel>>)
