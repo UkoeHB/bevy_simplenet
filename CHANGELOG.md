@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.2]
+
+- Fix reconnect/close handling when failing to connect.
+
+
 ## [0.13.1]
 
 - Shut down clients instead of attempting to reconnect after `AuthTokens` expire.

@@ -246,7 +246,12 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
             }
         }
 
-        Ok(ezsockets::client::ClientCloseMode::Reconnect)
+        // choose response
+        match self.config.reconnect_on_disconnect
+        {
+            true  => Ok(ezsockets::client::ClientCloseMode::Reconnect),
+            false => Ok(ezsockets::client::ClientCloseMode::Close),
+        }
     }
 
     /// Respond to the client being disconnected.

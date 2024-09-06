@@ -44,47 +44,52 @@ On WASM targets the client backend will not update while any other tasks are run
 
 ## Example
 
+An example using `bevy` to manage client and server resources.
+
 ### Setup
 
 **Common**
 
-Define a channel.
+Specify all the message types in a `ChannelPack`. Messages are automatically serialized and deserialized, so concrete types are required.
 
 ```rust
+/// Clients send these when connecting to the server.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestConnectMsg(pub String);
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TestServerMsg(pub u64);
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TestServerResponse(pub u64);
-
+/// Clients can send these at any time.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestClientMsg(pub u64);
 
+/// Client requests are special messages that expect a response from the server.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TestClientRequest(pub u64);
+
+/// Servers can send these at any time.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TestServerMsg(pub u64);
+
+/// Servers send these in response to client requests.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TestServerResponse(pub u64);
 
 #[derive(Debug, Clone)]
 pub struct TestChannel;
 impl ChannelPack for TestChannel
 {
     type ConnectMsg = TestConnectMsg;
-    type ServerMsg = TestServerMsg;
-    type ServerResponse = TestServerResponse;
     type ClientMsg = TestClientMsg;
     type ClientRequest = TestClientRequest;
+    type ServerMsg = TestServerMsg;
+    type ServerResponse = TestServerResponse;
 }
 ```
 
 **Server**
 
-Prepare to make servers.
+Prepare to make servers. We need a separate `ServerFactory` to embed the channel's protocol version in a centralized location.
 
 ```rust
-type TestServerEvent = ServerEventFrom<TestChannel>;
-
 fn server_factory() -> ServerFactory<TestChannel>
 {
     // It is recommended to make server/client factories with baked-in protocol versions (e.g.
@@ -111,11 +116,9 @@ fn setup_server(mut commands: Commands)
 
 **Client**
 
-Prepare to make clients.
+Prepare to make clients. We need a separate `ClientFactory` to embed the channel's protocol version, as with the server factory.
 
 ```rust
-type TestClientEvent = ClientEventFrom<TestChannel>;
-
 fn client_factory() -> ClientFactory<TestChannel>
 {
     // You must use the same protocol version string as the server factory.
@@ -142,19 +145,19 @@ fn setup_client(mut commands: Commands)
 
 ### Sending from the client
 
-Send a message.
+Send a message. The `send` method returns a `MessageSignal` that can be used to track the message status.
 
 ```rust
-fn send_client_message(client: Client<TestChannel>)
+fn send_client_message(client: Res<Client<TestChannel>>)
 {
     let message_signal = client.send(TestClientMsg(42));
 }
 ```
 
-Send a request.
+Send a request. The `request` method returns a `RequestSignal` that can be used to track the request status.
 
 ```rust
-fn send_client_request(client: Client<TestChannel>)
+fn send_client_request(client: Res<Client<TestChannel>>)
 {
     let request_signal = client.request(TestClientRequest(24));
 }
@@ -165,16 +168,16 @@ fn send_client_request(client: Client<TestChannel>)
 Send a message.
 
 ```rust
-fn send_server_message(server: Server<TestChannel>)
+fn send_server_message(server: Res<Server<TestChannel>>)
 {
     server.send(0u128, TestServerMsg(111));
 }
 ```
 
-Send a response.
+Send a response. The `RequestToken` allows us to correctly associate the response with the original response. If you drop the token then the client will automatically receive a `ClientEvent::Reject` event and their `RequestSignal` will return `RequestStatus::Rejected`.
 
 ```rust
-fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>)
+fn send_server_response(In(token): In<RequestToken>, server: Res<Server<TestChannel>>)
 {
     server.respond(token, TestServerResponse(1));
 }
@@ -182,8 +185,12 @@ fn send_server_response(In(token): In<RequestToken>, server: Server<TestChannel>
 
 ### Reading on the client
 
+All client events are synchronized to ensure deterministic, unambiguous behavior.
+
 ```rust
-fn read_on_client(client: &mut Client<TestChannel>)
+type TestClientEvent = ClientEventFrom<TestChannel>;
+
+fn read_on_client(mut client: ResMut<Client<TestChannel>>)
 {
     while let Some(client_event) = client.next()
     {
@@ -210,8 +217,12 @@ fn read_on_client(client: &mut Client<TestChannel>)
 
 ### Reading on the server
 
+All server events are synchronized to ensure deterministic, unambiguous behavior.
+
 ```rust
-fn read_on_server(server: &mut Server<TestChannel>)
+type TestServerEvent = ServerEventFrom<TestChannel>;
+
+fn read_on_server(mut server: ResMut<Server<TestChannel>>)
 {
     while let Some((client_id, server_event)) = server.next()
     {
