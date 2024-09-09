@@ -20,6 +20,12 @@ pub struct ClientConfig
     /// authentication endpoint can put the client in a holding pattern due to over-capacity.
     pub reconnect_on_disconnect: bool,
     /// Try to reconnect if the client is closed by the server. Defaults to `false`.
+    ///
+    /// If this is set to `true`, then if the server closes a connection the client will immediately sleep for
+    /// [`Self::reconnect_interval`] before attempting to reconnect. This avoids a [DDOS][ddos] scenario where
+    /// honest clients overload the server when it is at capacity.
+    ///
+    /// [ddos]: https://github.com/gbaranski/ezsockets/issues/104#issuecomment-2226651119
     pub reconnect_on_server_close: bool,
     /// Reconnect interval (delay between reconnect attempts). Defaults to 2 seconds.
     pub reconnect_interval: Duration,
