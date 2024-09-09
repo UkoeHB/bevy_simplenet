@@ -346,6 +346,7 @@ fn request_dropped()
             bevy_simplenet::ClientConfig{
                 reconnect_on_disconnect   : true,
                 reconnect_on_server_close : true,  //we want client to reconnect but fail to get response
+                reconnect_interval: std::time::Duration::from_millis(5),  //tiny interval to insert after disconnect
                 ..Default::default()
             },
             ()
