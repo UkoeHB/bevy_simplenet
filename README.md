@@ -304,7 +304,8 @@ It is recommended to set a relatively low auth token expiry if you are concerned
 
 | bevy   | bevy_simplenet |
 |--------|----------------|
-| 0.14   | v0.12 - master |
+| 0.15   | v0.14 - master |
+| 0.14   | v0.12 - v0.13  |
 | 0.13   | v0.9 - v0.11   |
 | 0.12   | v0.5 - v0.8    |
 | 0.11   | v0 - v0.4      |

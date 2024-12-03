@@ -7,15 +7,11 @@ use bevy::window::WindowTheme;
 use bevy::winit::{UpdateMode, WinitSettings};
 use bevy_cobweb::prelude::*;
 use bevy_cobweb_ui::prelude::*;
-use sickle::theme::{ComponentThemePlugin, DefaultTheme, UiContext};
-use sickle::ui_builder::{UiBuilderExt, UiRoot};
-use sickle::{DefaultTheme, SickleUiPlugin, UiContext};
 
 //standard shortcuts
 use std::fmt::Write;
 use wasm_timer::{SystemTime, UNIX_EPOCH};
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 type DemoClient      = bevy_simplenet::Client<DemoChannel>;
@@ -26,7 +22,6 @@ fn client_factory() -> bevy_simplenet::ClientFactory<DemoChannel>
     bevy_simplenet::ClientFactory::<DemoChannel>::new("demo")
 }
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(ReactResource, Copy, Clone, Eq, PartialEq, Debug)]
@@ -51,7 +46,6 @@ impl ConnectionStatus
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 #[derive(ReactResource, Default)]
 struct ButtonOwner
@@ -69,7 +63,6 @@ impl ButtonOwner
     }
 }
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(ReactResource)]
@@ -92,19 +85,13 @@ impl PendingSelect
 impl Default for PendingSelect { fn default() -> Self { Self(None) } }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
-/// Entity event for when the button should be selected.
+/// Event broadcasted for when the button should be selected.
 struct SelectButton;
 
-/// Entity event for when the button should be deselected.
+/// Event broadcasted for when the button should be deselected.
 struct DeselectButton;
 
-/// Marker type for the counter theme.
-#[derive(Component, UiContext, DefaultTheme, Copy, Clone, Debug)]
-struct ButtonWidget;
-
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn handle_button_select(
@@ -131,7 +118,6 @@ fn handle_button_select(
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 fn handle_button_deselect(
     mut c: Commands,
@@ -143,7 +129,6 @@ fn handle_button_deselect(
     owner.get_mut(&mut c).predicted_id = None;
 }
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn set_new_server_state(
@@ -167,62 +152,53 @@ fn set_new_server_state(
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 fn build_ui(mut c: Commands, mut s: ResMut<SceneLoader>)
 {
-    let file = LoadableRef::from_file("example.client");
-    c.ui_builder(UiRoot).load_scene(&mut s, file.e("scene"), |l| {
+    let file = SceneFile::new("example.client");
+    c.ui_root().load_scene_and_edit(&file + "scene", &mut s, |l| {
         l.edit("status", |l| {
             l.update_on(resource_mutation::<ConnectionStatus>(),
-                |id| move |mut t: TextEditor, status: ReactRes<ConnectionStatus>| {
-                    t.write(id, |t| write!(t, "Status: {}", status.to_string()));
+                |id: UpdateId, mut e: TextEditor, status: ReactRes<ConnectionStatus>| {
+                    write_text!(e, *id, "Status: {}", status.to_string());
                 }
             );
         })
         .edit("owner", |l| {
             l.update_on(resource_mutation::<ButtonOwner>(),
-                |id| move |mut t: TextEditor, owner: ReactRes<ButtonOwner>| {
-                    t.write(id, |t| {
-                        match owner.display_id()
-                        {
-                            Some(id) => write!(t, "Owner: {}", id % 1_000_000u128),
-                            None     => write!(t, "No owner"),
-                        }
-                    });
+                |id: UpdateId, mut e: TextEditor, owner: ReactRes<ButtonOwner>| {
+                    let _ = match owner.display_id()
+                    {
+                        Some(display_id) => write_text!(e, *id, "Owner: {}", display_id % 1_000_000u128),
+                        None => write_text!(e, *id, "No owner"),
+                    };
                 }
             );
         });
 
-        let mut placeholder = Entity::PLACEHOLDER;
-        l.load_with_theme::<ButtonWidget>(file.e("button"), &mut placeholder, |n, _| {
-            let button = n.id();
-            n.insert(ButtonWidget);
-            n.on_pressed(move |mut c: Commands| {
+        l.load_scene_and_edit(file + "button", |l| {
+            let button = l.id();
+            l.on_pressed(move |mut c: Commands| {
                 c.react().entity_event(button, Select);
                 c.react().broadcast(SelectButton);
             })
-            .react().on(broadcast::<DeselectButton>(), move |mut c: Commands| {
-                c.react().entity_event(button, Deselect);
-            });
-            n.on_select(|| println!("selected"))
+            .update_on(broadcast::<DeselectButton>(), |id: UpdateId, mut c: Commands| {
+                c.react().entity_event(*id, Deselect);
+            })
+            .on_select(|| println!("selected"))
             .on_deselect(|| println!("deselected"));
         });
     });
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 fn setup(mut commands: Commands)
 {
     // prepare 2D camera
-    commands.spawn(
-            Camera2dBundle{ transform: Transform{ translation: Vec3 { x: 0., y: 0., z: 1000. }, ..default() }, ..default() }
-        );
+    commands.spawn(Camera2d::default());
 }
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn handle_client_events(
@@ -299,7 +275,6 @@ fn handle_client_events(
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 fn main()
 {
@@ -347,11 +322,9 @@ fn main()
             unfocused_mode : UpdateMode::reactive(std::time::Duration::from_millis(100)),
             ..Default::default()
         })
-        .add_plugins(SickleUiPlugin)
         .add_plugins(ReactPlugin)
         .add_plugins(CobwebUiPlugin)
-        .load("main.load.json")
-        .add_plugins(ComponentThemePlugin::<ButtonWidget>::new())
+        .load("main.cob")
         .insert_resource(client)
         .insert_react_resource(ConnectionStatus::Connecting)
         .init_react_resource::<ButtonOwner>()
@@ -359,8 +332,8 @@ fn main()
         .add_systems(Startup, setup)
         .add_systems(OnEnter(LoadState::Done), build_ui)
         .add_systems(Update, handle_client_events)
-        .react(|rc| rc.on_persistent(broadcast::<SelectButton>(), handle_button_select))
-        .react(|rc| rc.on_persistent(broadcast::<DeselectButton>(), handle_button_deselect))
+        .add_reactor(broadcast::<SelectButton>(), handle_button_select)
+        .add_reactor(broadcast::<DeselectButton>(), handle_button_deselect)
         .run();
 }
 

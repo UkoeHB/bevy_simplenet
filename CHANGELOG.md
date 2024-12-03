@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.14.0]
+
+- Update to `bevy` v0.15.
+
+
 ## [0.13.2]
 
 - Fix reconnect/close handling when failing to connect.

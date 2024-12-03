@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy                  = { version = "0.14",  default-features = false }
-bevy_cobweb           = { version = "0.8" }
+bevy                  = { version = "0.15",  default-features = false }
+bevy_cobweb           = { version = "0.13" }
 bevy_simplenet        = { path = "../../", default-features = false, features = [ "server", "bevy" ] }
 bevy_simplenet-common = { path = "../common/" }
 enfync                = { version = "0.1" }

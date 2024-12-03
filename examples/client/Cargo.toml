@@ -7,9 +7,9 @@ edition = "2021"
 dev = ["bevy_cobweb_ui/dev"]
 
 [dependencies]
-bevy                  = { version = "0.14" }
-bevy_cobweb           = { version = "0.8" }
-bevy_cobweb_ui        = { git = "https://github.com/UkoeHB/bevy_cobweb_ui", rev = "5504628" }
+bevy                  = { version = "0.15" }
+bevy_cobweb           = { version = "0.13" }
+bevy_cobweb_ui        = { version = "0.5" }
 bevy_simplenet        = { path = "../../", default-features = false, features = [ "client", "bevy" ] }
 bevy_simplenet-common = { path = "../common/" }
 enfync                = { version = "0.1" }
