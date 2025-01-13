@@ -15,7 +15,8 @@ pub struct ClientConfig
     /// Try to reconnect if the client is disconnected or fails to connect. Defaults to `true`.
     ///
     /// Note that if set to `true` then the client will spin in a reconnect loop if the server is at capacity
-    /// and rejects new connections. To get around this you should use [`AuthRequest::Token`] with a short
+    /// and rejects new connections. To get around this you should use
+    /// [`AuthRequest::Token`](crate::AuthRequest::Token) with a short
     /// expiry time so reconnects will automatically stop. Then when a client re-requests an `AuthToken`, your
     /// authentication endpoint can put the client in a holding pattern due to over-capacity.
     pub reconnect_on_disconnect: bool,
@@ -33,7 +34,7 @@ pub struct ClientConfig
     pub max_initial_connect_attempts: usize,
     /// Maximum number of reconnect attempts when reconnecting. Defaults to infinite.
     ///
-    /// Reconnect attemps may be cut short if using [`AuthRequest::Token`] and the token expires.
+    /// Reconnect attemps may be cut short if using [`AuthRequest::Token`](crate::AuthRequest::Token) and the token expires.
     pub max_reconnect_attempts: usize,
     /// Duration between socket heartbeat pings if the connection is inactive. Defaults to 5 seconds.
     pub heartbeat_interval: Duration,

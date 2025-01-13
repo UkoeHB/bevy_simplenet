@@ -78,7 +78,7 @@ fn authenticate_token(pubkey: &[u8; AUTH_PUBKEY_BYTES], request: &AuthRequest) -
     // Check token expiration.
     if token.is_expired() {
         tracing::debug!("failed verifying auth request {request:?}, token is expired \
-            (current time: {:?}, expiration time: {:?}",
+            (current time: {:?}, expiration time: {:?})",
             format_date(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default()),
             format_date(token.expiration_time()),
         );
