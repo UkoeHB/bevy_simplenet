@@ -62,11 +62,9 @@ pub enum AcceptorConfig
     Default,
 
     #[cfg(feature = "tls-rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls-rustls")))]
     Rustls(axum_server::tls_rustls::RustlsConfig),
 
     #[cfg(feature = "tls-openssl")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls-openssl")))]
     OpenSSL(axum_server::tls_openssl::OpenSSLConfig),
 }
 
