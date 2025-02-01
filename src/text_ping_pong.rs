@@ -12,7 +12,7 @@ use std::time::Duration;
 pub(crate) fn text_ping_fn(timestamp: std::time::Duration) -> ezsockets::RawMessage
 {
     let timestamp = timestamp.as_millis();
-    ezsockets::RawMessage::Text(format!("ping:{}", timestamp))
+    ezsockets::RawMessage::Text(format!("ping:{}", timestamp).into())
 }
 
 //-------------------------------------------------------------------------------------------------------------------

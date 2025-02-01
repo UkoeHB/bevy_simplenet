@@ -8,7 +8,6 @@ use bincode::Options;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fmt::Debug;
-use std::vec::Vec;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -65,7 +64,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
     }
 
     // Receive text from client (via session connection).
-    async fn on_text(&mut self, text: String) -> Result<(), ezsockets::Error>
+    async fn on_text(&mut self, text: ezsockets::Utf8Bytes) -> Result<(), ezsockets::Error>
     {
         match self.env_type
         {
@@ -118,7 +117,7 @@ impl<Channel: ChannelPack> ezsockets::SessionExt for SessionHandler<Channel>
     }
 
     // Receive binary from client (via session connection).
-    async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), ezsockets::Error>
+    async fn on_binary(&mut self, bytes: ezsockets::Bytes) -> Result<(), ezsockets::Error>
     {
         // try to update rate limit tracker
         if !self.rate_limit_tracker.try_count_msg()

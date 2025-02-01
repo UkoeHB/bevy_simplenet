@@ -59,26 +59,22 @@ tracing         = { version = "0.1" }
 url             = { version = "2.4" }
 wasm-timer      = { version = "0.2" }
 
-axum          = { version = "0.6", optional = true }
-axum-server   = { version = "0.5", optional = true }
+axum          = { version = "0.8", optional = true }  # Locked to ezsockets axum version.
+axum-server   = { version = "0.7", optional = true }
 bevy_ecs      = { version = "0.15", optional = true }
 ed25519-dalek = { version = "2.1.1", optional = true, features = ["rand_core"] }
 rand          = { version = "0.8", optional = true }
 tokio         = { version = "1.29", optional = true, features = ["sync"] }
 
-[dependencies.ezsockets]
-version          = "0.6.4"
-default-features = false
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+#todo: how to configure target on 'client' feature?
+#ezsockets = { version = "0.6.4", default-features = false, features = [ "native_client" ] }
+ezsockets = { git = "https://github.com/UkoeHB/ezsockets", rev = "147f751", default-features = false, features = [ "native_client" ] }
 
-[target.'cfg(not(target_family = "wasm"))'.dependencies.ezsockets]
-version          = "0.6.4"
-default-features = false
-features         = [ "native_client" ]  #todo: how to configure target on 'client' feature?
-
-[target.'cfg(target_family = "wasm")'.dependencies.ezsockets]
-version          = "0.6.4"
-default-features = false
-features         = [ "wasm_client" ]  #todo: how to configure target on 'client' feature?
+[target.'cfg(target_family = "wasm")'.dependencies]
+#todo: how to configure target on 'client' feature?
+#ezsockets = { version = "0.6.4", default-features = false, features = [ "wasm_client" ] }
+ezsockets = { git = "https://github.com/UkoeHB/ezsockets", rev = "147f751", default-features = false, features = [ "wasm_client" ] }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3" }

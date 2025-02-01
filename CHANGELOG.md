@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.0]
+
+- Update dependencies.
+
+
 ## [0.14.2]
 
 - Fix docs.
