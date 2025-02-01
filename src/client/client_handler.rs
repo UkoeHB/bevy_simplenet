@@ -39,7 +39,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     /// Text from server.
     /// - Does nothing on native.
     /// - Echoes the text back to the server on WASM for custom Ping/Pong protocol.
-    async fn on_text(&mut self, text: String) -> Result<(), ezsockets::Error>
+    async fn on_text(&mut self, text: ezsockets::Utf8Bytes) -> Result<(), ezsockets::Error>
     {
         match env_type()
         {
@@ -79,7 +79,7 @@ impl<Channel: ChannelPack> ezsockets::ClientExt for ClientHandler<Channel>
     }
 
     /// Binary from server.
-    async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), ezsockets::Error>
+    async fn on_binary(&mut self, bytes: ezsockets::Bytes) -> Result<(), ezsockets::Error>
     {
         tracing::trace!("received binary from server");
 

@@ -23,9 +23,9 @@ impl Default for RateLimitConfig
     fn default() -> RateLimitConfig
     {
         RateLimitConfig{
-                period    : Duration::from_millis(100u64),
-                max_count : 10u32,
-            }
+            period    : Duration::from_millis(100u64),
+            max_count : 10u32,
+        }
     }
 }
 

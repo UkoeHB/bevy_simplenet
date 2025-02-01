@@ -96,7 +96,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
             tracing::trace!("max connections reached, dropping connection request...");
             return Err(Some(ezsockets::CloseFrame{
                     code   : ezsockets::CloseCode::Protocol,
-                    reason : String::from("max connections")
+                    reason : "max connections".into()
                 }));
         }
 
@@ -164,7 +164,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                                     ezsockets::CloseFrame
                                     {
                                         code   : ezsockets::CloseCode::Policy,
-                                        reason : String::from("no auth received")
+                                        reason : "no auth received".into()
                                     }
                                 ));
                         }
@@ -239,7 +239,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                     ezsockets::CloseFrame
                     {
                         code   : ezsockets::CloseCode::Policy,
-                        reason : String::from("client already connected")
+                        reason : "client already connected".into()
                     }
                 ));
 
@@ -265,7 +265,7 @@ impl<Channel: ChannelPack> ezsockets::ServerExt for ConnectionHandler<Channel>
                     ezsockets::CloseFrame
                     {
                         code   : ezsockets::CloseCode::Away,
-                        reason : String::default(),
+                        reason : Default::default(),
                     }
                 ));
             };

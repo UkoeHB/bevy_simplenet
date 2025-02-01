@@ -136,7 +136,7 @@ fn hello_world()
     let closure_frame =
         ezsockets::CloseFrame{
             code   : ezsockets::CloseCode::Normal,
-            reason : String::from("test")
+            reason : "test".into()
         };
     websocket_server.disconnect_client(client_id, Some(closure_frame));
 

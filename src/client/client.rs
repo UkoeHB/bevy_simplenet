@@ -223,7 +223,7 @@ impl<Channel: ChannelPack> Client<Channel>
         let closure_frame =
             ezsockets::CloseFrame{
                 code   : ezsockets::CloseCode::Normal,
-                reason : String::from("client done")
+                reason : "client done".into()
             };
         if self.client.close(Some(closure_frame)).is_err()
         {
@@ -274,11 +274,11 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
 
     /// Makes a new client.
     pub fn new_client(&self,
-        runtime_handle : enfync::builtin::Handle,
-        url            : url::Url,
-        auth           : AuthRequest,
-        config         : ClientConfig,
-        connect_msg    : Channel::ConnectMsg,
+        _runtime_handle : enfync::builtin::Handle,
+        url             : url::Url,
+        auth            : AuthRequest,
+        config          : ClientConfig,
+        connect_msg     : Channel::ConnectMsg,
     ) -> Client<Channel>
     {
         // prepare to make client connection
@@ -309,7 +309,7 @@ impl<Channel: ChannelPack> ClientFactory<Channel>
         // prepare client connector
         let client_connector = {
                 #[cfg(not(target_family = "wasm"))]
-                { ezsockets::ClientConnectorTokio::from(runtime_handle.clone()) }
+                { ezsockets::ClientConnectorTokio::from(_runtime_handle.clone()) }
 
                 #[cfg(target_family = "wasm")]
                 { ezsockets::ClientConnectorWasm::default() }

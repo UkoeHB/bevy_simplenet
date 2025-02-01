@@ -153,20 +153,19 @@ fn set_new_server_state(
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn build_ui(mut c: Commands, mut s: ResMut<SceneLoader>)
+fn build_ui(mut c: Commands, mut s: SceneBuilder)
 {
-    let file = SceneFile::new("example.client");
-    c.ui_root().load_scene_and_edit(&file + "scene", &mut s, |l| {
+    c.ui_root().spawn_scene(("example.client", "scene"), &mut s, |l| {
         l.edit("status", |l| {
             l.update_on(resource_mutation::<ConnectionStatus>(),
-                |id: UpdateId, mut e: TextEditor, status: ReactRes<ConnectionStatus>| {
+                |id: TargetId, mut e: TextEditor, status: ReactRes<ConnectionStatus>| {
                     write_text!(e, *id, "Status: {}", status.to_string());
                 }
             );
         })
         .edit("owner", |l| {
             l.update_on(resource_mutation::<ButtonOwner>(),
-                |id: UpdateId, mut e: TextEditor, owner: ReactRes<ButtonOwner>| {
+                |id: TargetId, mut e: TextEditor, owner: ReactRes<ButtonOwner>| {
                     let _ = match owner.display_id()
                     {
                         Some(display_id) => write_text!(e, *id, "Owner: {}", display_id % 1_000_000u128),
@@ -176,13 +175,13 @@ fn build_ui(mut c: Commands, mut s: ResMut<SceneLoader>)
             );
         });
 
-        l.load_scene_and_edit(file + "button", |l| {
+        l.spawn_scene(("example.client", "button"), |l| {
             let button = l.id();
             l.on_pressed(move |mut c: Commands| {
                 c.react().entity_event(button, Select);
                 c.react().broadcast(SelectButton);
             })
-            .update_on(broadcast::<DeselectButton>(), |id: UpdateId, mut c: Commands| {
+            .update_on(broadcast::<DeselectButton>(), |id: TargetId, mut c: Commands| {
                 c.react().entity_event(*id, Deselect);
             })
             .on_select(|| println!("selected"))
