@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.2]
+
+- Switch `native-tls` ezsockets feature to `rustls`.
+
+
 ## [0.15.1]
 
 - Remove `tungstenite` dependency and add `native-tls` feature to ezsockets.
