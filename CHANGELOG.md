@@ -3,6 +3,7 @@
 ## [0.15.0]
 
 - Update dependencies.
+- Add `tungstenite` with `native-tls` feature on clients so TLS connections work automatically.
 
 
 ## [0.14.2]
