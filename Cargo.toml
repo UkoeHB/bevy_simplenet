@@ -68,9 +68,7 @@ tokio         = { version = "1.29", optional = true, features = ["sync"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 #todo: how to configure target on 'client' feature?
-ezsockets = { version = "0.7.0", default-features = false, features = [ "native_client" ] }
-# Required for TLS connections.
-tungstenite = { version = "0.26.1", features = ["native-tls"] }
+ezsockets = { version = "0.7.0", default-features = false, features = [ "native_client", "native-tls" ] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 #todo: how to configure target on 'client' feature?

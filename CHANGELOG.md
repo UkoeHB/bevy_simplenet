@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.1]
+
+- Remove `tungstenite` dependency and add `native-tls` feature to ezsockets.
+
+
 ## [0.15.0]
 
 - Update dependencies.
