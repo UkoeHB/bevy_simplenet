@@ -61,7 +61,7 @@ wasm-timer      = { version = "0.2" }
 
 axum          = { version = "0.8", optional = true }  # Locked to ezsockets axum version.
 axum-server   = { version = "0.7", optional = true }
-bevy_ecs      = { version = "0.15", optional = true }
+bevy_ecs      = { version = "0.16", optional = true }
 ed25519-dalek = { version = "2.1.1", optional = true, features = ["rand_core"] }
 rand          = { version = "0.8", optional = true }
 tokio         = { version = "1.29", optional = true, features = ["sync"] }

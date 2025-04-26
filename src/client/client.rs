@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 /// 3) Call [`Client::next()`] to drain any lingering events. [`ClientReport::IsDead`] will be the last event.
 /// 4) Drop the client.
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::resource::Resource))]
 pub struct Client<Channel: ChannelPack>
 {
     /// this client's id

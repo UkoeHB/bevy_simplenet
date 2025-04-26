@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.16.0]
+
+- Update to `bevy` v0.16.
+
+
 ## [0.15.2]
 
 - Switch `native-tls` ezsockets feature to `rustls`.

@@ -104,7 +104,7 @@ async fn run_server(router: axum::Router, listener: std::net::TcpListener, accep
 ///
 /// Note that the server does not currently have a shut-down procedure other than closing the executable.
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::system::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::resource::Resource))]
 pub struct Server<Channel: ChannelPack>
 {
     /// The server's address.
