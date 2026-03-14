@@ -110,7 +110,7 @@ fn rate_limit_test(max_count_per_period: u32)
     assert_eq!(signal.status(), ezsockets::MessageStatus::Sent);
     assert_eq!(websocket_server.num_connections(), 1u64);
 
-
+    std::thread::sleep(std::time::Duration::from_millis(25)); //wait for async machinery
 
     // send messages to fill up server rate limiter to the brim
     let mut signals = Vec::new();
@@ -194,7 +194,7 @@ fn rate_limiter()
         .with_max_level(tracing::Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    tracing::info!("ws hello world test: start");
+    tracing::info!("ws rate limiter test: start");
     */
 
     rate_limit_test(1);
